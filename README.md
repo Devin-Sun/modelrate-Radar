@@ -2,7 +2,7 @@
 
 ModelRate Radar 是一个全球 AI 订阅价格监测网页，用于比较 OpenAI ChatGPT 与 Anthropic Claude 在不同国家和地区的本地订阅价格、年付价格和美元折算结果。
 
-在线访问：[modelrate-radar.sundonghui0.chatgpt.site](https://modelrate-radar.sundonghui0.chatgpt.site)
+在线访问：[modelrate-radar.vercel.app](https://modelrate-radar.vercel.app)
 
 ## 主要功能
 
