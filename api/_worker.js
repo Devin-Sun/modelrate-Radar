@@ -1,18 +1,12 @@
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { ISO_REGION_CODES, SUBSCRIPTION_PLANS } from "../src/data.js";
-
-const clientDir = "dist/client";
-const html = await readFile(`${clientDir}/index.html`, "utf8");
-
-const worker = `const html = ${JSON.stringify(html)};
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI、Google Gemini 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-D3BMSjoc.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-DizqAnIG.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
   anthropic: { slug: "claude-by-anthropic", id: "6473753684" }
 };
 
-const SUBSCRIPTION_PLANS = ${JSON.stringify(SUBSCRIPTION_PLANS)};
-const REGION_CODES = ${JSON.stringify(ISO_REGION_CODES)};
+const SUBSCRIPTION_PLANS = {"openai":[{"id":"free","name":"Free","billing":"免费","kind":"free"},{"id":"go","name":"Go","billing":"个人套餐","storeProduct":"ChatGPT Go","annualKind":"none"},{"id":"plus","name":"Plus","billing":"个人套餐","storeProduct":"ChatGPT Plus","annualStoreProduct":"ChatGPT Plus","annualStoreProductOccurrence":1},{"id":"pro5","name":"Pro 5x","billing":"个人套餐","storeProduct":"ChatGPT Pro 5x","annualKind":"none"},{"id":"pro20","name":"Pro 20x","billing":"个人套餐","storeProduct":"ChatGPT Pro 20x","annualKind":"none"}],"anthropic":[{"id":"free","name":"Free","billing":"免费","kind":"free"},{"id":"pro","name":"Pro","billing":"个人套餐","storeProduct":"Claude Pro - Monthly","annualStoreProduct":"Claude Pro - Annual"},{"id":"max5","name":"Max 5x","billing":"个人套餐","storeProduct":"Claude Max 5x - Monthly","annualKind":"none","minimumReferenceAmount":100,"minimumReferenceDisplay":"US$100 / 月 · 官网"},{"id":"max20","name":"Max 20x","billing":"个人套餐","storeProduct":"Claude Max 20x - Monthly","annualKind":"none","minimumReferenceAmount":200,"minimumReferenceDisplay":"US$200 / 月 · 官网"},{"id":"team","name":"Team","billing":"每席位 · 至少 5 席","kind":"reference","referenceAmount":30,"referenceDisplay":"US$30 / 月","annualReferenceAmount":300,"annualReferenceDisplay":"US$300 / 年"}]};
+const REGION_CODES = ["AD","AE","AF","AG","AI","AL","AM","AO","AQ","AR","AS","AT","AU","AW","AX","AZ","BA","BB","BD","BE","BF","BG","BH","BI","BJ","BL","BM","BN","BO","BQ","BR","BS","BT","BV","BW","BY","BZ","CA","CC","CD","CF","CG","CH","CI","CK","CL","CM","CN","CO","CR","CU","CV","CW","CX","CY","CZ","DE","DJ","DK","DM","DO","DZ","EC","EE","EG","EH","ER","ES","ET","FI","FJ","FK","FM","FO","FR","GA","GB","GD","GE","GF","GG","GH","GI","GL","GM","GN","GP","GQ","GR","GS","GT","GU","GW","GY","HK","HM","HN","HR","HT","HU","ID","IE","IL","IM","IN","IO","IQ","IR","IS","IT","JE","JM","JO","JP","KE","KG","KH","KI","KM","KN","KP","KR","KW","KY","KZ","LA","LB","LC","LI","LK","LR","LS","LT","LU","LV","LY","MA","MC","MD","ME","MF","MG","MH","MK","ML","MM","MN","MO","MP","MQ","MR","MS","MT","MU","MV","MW","MX","MY","MZ","NA","NC","NE","NF","NG","NI","NL","NO","NP","NR","NU","NZ","OM","PA","PE","PF","PG","PH","PK","PL","PM","PN","PR","PS","PT","PW","PY","QA","RE","RO","RS","RU","RW","SA","SB","SC","SD","SE","SG","SH","SI","SJ","SK","SL","SM","SN","SO","SR","SS","ST","SV","SX","SY","SZ","TC","TD","TF","TG","TH","TJ","TK","TL","TM","TN","TO","TR","TT","TV","TW","TZ","UA","UG","UM","US","UY","UZ","VA","VC","VE","VG","VI","VN","VU","WF","WS","YE","YT","ZA","ZM","ZW"];
 
 const priceCache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
@@ -46,7 +40,7 @@ const parseAmount = (display) => {
   }
   if (comma >= 0 && dot >= 0) {
     const decimal = comma > dot ? "," : ".";
-    const thousands = decimal === "," ? /\\./g : /,/g;
+    const thousands = decimal === "," ? /\./g : /,/g;
     return Number(raw.replace(thousands, "").replace(decimal, ".")) * compactMultiplier;
   }
   const separator = comma >= 0 ? "," : dot >= 0 ? "." : null;
@@ -70,7 +64,7 @@ async function fetchStorePrice(provider, country) {
     if (!response.ok) return { provider, status: "unavailable", source, httpStatus: response.status };
     const page = await response.text();
     const currency = page.match(/"priceCurrency":"([A-Z]{3})"/)?.[1] || null;
-    const pairs = [...page.matchAll(/<div class="text-pair[^>]*><span>([\\s\\S]*?)<\\/span>\\s*<span>([\\s\\S]*?)<\\/span>/gi)]
+    const pairs = [...page.matchAll(/<div class="text-pair[^>]*><span>([\s\S]*?)<\/span>\s*<span>([\s\S]*?)<\/span>/gi)]
       .map((match) => ({ name: decodeText(match[1]), display: decodeText(match[2]) }));
     const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
       if (plan.kind === "free") return { ...plan, status: "live", display: "免费", amount: 0, currency };
@@ -169,7 +163,7 @@ const supabaseHeaders = (env, extra = {}) => ({
 
 async function supabaseRequest(env, path, options = {}) {
   if (!backendConfigured(env)) throw new Error("database_not_configured");
-  const response = await fetch(env.SUPABASE_URL.replace(/\\/$/, "") + path, {
+  const response = await fetch(env.SUPABASE_URL.replace(/\/$/, "") + path, {
     ...options,
     headers: supabaseHeaders(env, options.headers || {}),
     signal: options.signal || AbortSignal.timeout(15000)
@@ -378,7 +372,7 @@ async function createAlertSubscription(env, origin, request) {
   const country = input.country ? String(input.country).toUpperCase() : null;
   const threshold = Number(input.thresholdPercent ?? 1);
   const validPlanIds = new Set((provider ? SUBSCRIPTION_PLANS[provider] : Object.values(SUBSCRIPTION_PLANS).flat()).map((plan) => plan.id));
-  if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || (country && !REGION_CODES.includes(country)) || (planId && !validPlanIds.has(planId)) || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (country && !REGION_CODES.includes(country)) || (planId && !validPlanIds.has(planId)) || !Number.isFinite(threshold) || threshold < 0 || threshold > 100) {
     throw new Error("invalid_alert_subscription");
   }
   const created = await supabaseRequest(env, "/rest/v1/alert_subscriptions", {
@@ -506,13 +500,3 @@ export default {
     return new Response("Not found", { status: 404 });
   }
 };
-`;
-
-await rm("dist/server", { recursive: true, force: true });
-await rm("dist/.openai", { recursive: true, force: true });
-await mkdir("dist/server", { recursive: true });
-await mkdir("dist/.openai", { recursive: true });
-await mkdir("api", { recursive: true });
-await writeFile("dist/server/index.js", worker);
-await writeFile("api/_worker.js", worker);
-await copyFile(".openai/hosting.json", "dist/.openai/hosting.json");
