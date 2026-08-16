@@ -73,7 +73,6 @@ async function fetchStorePrice(provider, country) {
     const pairs = [...page.matchAll(/<div class="text-pair[^>]*><span>([\\s\\S]*?)<\\/span>\\s*<span>([\\s\\S]*?)<\\/span>/gi)]
       .map((match) => ({ name: decodeText(match[1]), display: decodeText(match[2]) }));
     const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
-      if (plan.kind === "free") return { ...plan, status: "live", display: "免费", amount: 0, currency };
       if (plan.kind === "reference") {
         const savingPercent = plan.annualReferenceAmount
           ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)

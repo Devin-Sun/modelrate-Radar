@@ -19,7 +19,6 @@ ModelRate Radar 是一个全球 AI 订阅价格监测网页，用于比较 OpenA
 
 ### OpenAI
 
-- Free
 - Go
 - Plus
 - Pro 5x
@@ -27,7 +26,6 @@ ModelRate Radar 是一个全球 AI 订阅价格监测网页，用于比较 OpenA
 
 ### Anthropic
 
-- Free
 - Pro
 - Max 5x
 - Max 20x

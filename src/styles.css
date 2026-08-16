@@ -112,7 +112,6 @@ main { min-height: 100vh; margin-left: 236px; }
 .plan-minimum-row.quote > span:last-child > strong { color: #9d8ec2; }
 .plan-minimum-row.reference > span:last-child > strong { color: #7db3ff; }
 .plan-minimum-row.pending > span:last-child > strong { color: #65787d; font-weight: 500; }
-.plan-minimum-row.free > span:last-child > strong { color: #70d4b8; }
 .plan-minimum-card > a { margin-top: auto; }
 
 .catalog-heading { gap: 16px; }

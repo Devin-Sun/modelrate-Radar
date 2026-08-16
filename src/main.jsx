@@ -195,7 +195,7 @@ function PriceMonitorCell({ provider, plans, supported, scanning, country, onHis
               <em>月付</em><strong>{plan.display || (scanning ? "采集中…" : "暂未取得")}</strong>
               {Number.isFinite(plan.usd) && plan.usd > 0 && <small>{usd(plan.usd)} / 月</small>}
             </span>
-            {plan.status !== "free" && plan.amount !== 0 && <span className={`billing-price annual ${plan.annual?.status || "none"}`}>
+            {plan.amount !== 0 && <span className={`billing-price annual ${plan.annual?.status || "none"}`}>
               <em>年付</em><strong>{plan.annual?.display || "仅月付"}</strong>
               {Number.isFinite(plan.annual?.usdMonthlyEquivalent) && <small>折合 {usd(plan.annual.usdMonthlyEquivalent)} / 月{annualComparison(plan.annual.savingPercent)}</small>}
             </span>}
@@ -475,7 +475,6 @@ export default function App() {
     const snapshot = PRICE_SNAPSHOTS.find((item) => item.region === code && item.provider === provider);
     const snapshotPlan = { openai: "plus", anthropic: "pro" }[provider];
     return SUBSCRIPTION_PLANS[provider].map((plan) => {
-      if (plan.kind === "free") return { ...plan, status: "live", kind: "catalog", display: "免费", amount: 0, usd: 0 };
       if (plan.kind === "reference") return {
         ...plan,
         status: "reference",
@@ -550,7 +549,6 @@ export default function App() {
   const providerPlanMinimums = useMemo(() => Object.keys(PROVIDERS).map((provider) => ({
     provider,
     plans: SUBSCRIPTION_PLANS[provider].map((definition) => {
-      if (definition.kind === "free") return { ...definition, display: "免费", usd: 0, status: "free" };
       if (definition.kind === "reference") return {
         ...definition,
         display: definition.referenceDisplay,
@@ -802,9 +800,9 @@ export default function App() {
                       <span className="minimum-price-stack">
                         <strong><em>月付最低</em>{Number.isFinite(plan.usd) && plan.usd > 0 ? usd(plan.usd) : plan.display}</strong>
                         {plan.code && <small>{flagFromCode(plan.code)} {zhRegionNames.of(plan.code)} · {plan.display}</small>}
-                        {plan.status !== "free" && <strong className={`annual-minimum ${plan.annualMinimum?.status || "none"}`}>
+                        <strong className={`annual-minimum ${plan.annualMinimum?.status || "none"}`}>
                           <em>年付最低</em>{Number.isFinite(plan.annualMinimum?.usdTotal) ? `${usd(plan.annualMinimum.usdTotal)} / 年` : plan.annualMinimum?.display || "仅月付"}
-                        </strong>}
+                        </strong>
                         {Number.isFinite(plan.annualMinimum?.usdMonthlyEquivalent) && <small>折合 {usd(plan.annualMinimum.usdMonthlyEquivalent)} / 月{annualComparison(plan.annualMinimum.savingPercent)}</small>}
                       </span>
                     </div>)}
@@ -891,7 +889,7 @@ export default function App() {
             <div className="form-grid">
               {backendStatus.ready && <label className="wide">邮箱<input required type="email" value={alertForm.email} onChange={(event) => setAlertForm({ ...alertForm, email: event.target.value })} placeholder="name@example.com" /></label>}
               <label>厂商<select value={alertForm.provider} onChange={(event) => setAlertForm({ ...alertForm, provider: event.target.value, planId: "" })}><option value="">全部厂商</option>{Object.entries(PROVIDERS).map(([id, provider]) => <option key={id} value={id}>{provider.name}</option>)}</select></label>
-              <label>套餐<select value={alertForm.planId} onChange={(event) => setAlertForm({ ...alertForm, planId: event.target.value })}><option value="">全部套餐</option>{(alertForm.provider ? SUBSCRIPTION_PLANS[alertForm.provider] : Object.values(SUBSCRIPTION_PLANS).flat()).filter((plan, index, list) => plan.kind !== "free" && list.findIndex((item) => item.id === plan.id && item.name === plan.name) === index).map((plan) => <option key={`${plan.id}-${plan.name}`} value={plan.id}>{plan.name}</option>)}</select></label>
+              <label>套餐<select value={alertForm.planId} onChange={(event) => setAlertForm({ ...alertForm, planId: event.target.value })}><option value="">全部套餐</option>{(alertForm.provider ? SUBSCRIPTION_PLANS[alertForm.provider] : Object.values(SUBSCRIPTION_PLANS).flat()).filter((plan, index, list) => list.findIndex((item) => item.id === plan.id && item.name === plan.name) === index).map((plan) => <option key={`${plan.id}-${plan.name}`} value={plan.id}>{plan.name}</option>)}</select></label>
               <label>地区<select value={alertForm.country} onChange={(event) => setAlertForm({ ...alertForm, country: event.target.value })}><option value="">全球任意地区</option>{ISO_REGION_CODES.map((code) => <option key={code} value={code}>{flagFromCode(code)} {zhRegionNames.of(code)} · {code}</option>)}</select></label>
               <label>最低降幅<input type="number" min="0" max="100" step="0.1" value={alertForm.thresholdPercent} onChange={(event) => setAlertForm({ ...alertForm, thresholdPercent: event.target.value })} /><span className="input-suffix">%</span></label>
             </div>

@@ -34,14 +34,12 @@ export const COVERAGE_SUMMARY = {
 
 export const SUBSCRIPTION_PLANS = {
   openai: [
-    { id: "free", name: "Free", billing: "免费", kind: "free" },
     { id: "go", name: "Go", billing: "个人套餐", storeProduct: "ChatGPT Go", annualKind: "none" },
     { id: "plus", name: "Plus", billing: "个人套餐", storeProduct: "ChatGPT Plus", annualStoreProduct: "ChatGPT Plus", annualStoreProductOccurrence: 1 },
     { id: "pro5", name: "Pro 5x", billing: "个人套餐", storeProduct: "ChatGPT Pro 5x", annualKind: "none" },
     { id: "pro20", name: "Pro 20x", billing: "个人套餐", storeProduct: "ChatGPT Pro 20x", annualKind: "none" }
   ],
   anthropic: [
-    { id: "free", name: "Free", billing: "免费", kind: "free" },
     { id: "pro", name: "Pro", billing: "个人套餐", storeProduct: "Claude Pro - Monthly", annualStoreProduct: "Claude Pro - Annual" },
     { id: "max5", name: "Max 5x", billing: "个人套餐", storeProduct: "Claude Max 5x - Monthly", annualKind: "none", minimumReferenceAmount: 100, minimumReferenceDisplay: "US$100 / 月 · 官网" },
     { id: "max20", name: "Max 20x", billing: "个人套餐", storeProduct: "Claude Max 20x - Monthly", annualKind: "none", minimumReferenceAmount: 200, minimumReferenceDisplay: "US$200 / 月 · 官网" },

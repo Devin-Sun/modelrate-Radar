@@ -83,6 +83,7 @@ try {
   assert.equal(indonesiaResponse.status, 200);
   const indonesia = await indonesiaResponse.json();
   assert.equal(indonesia.prices.length, 2);
+  assert.equal(indonesia.prices.flatMap((item) => item.plans).some((plan) => plan.id === "free"), false);
   assert.equal(indonesia.prices.flatMap((item) => item.plans).some((plan) => ["business", "enterprise"].includes(plan.id)), false);
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "plus").amount, 349000);
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "plus").annual.amount, 3499000);
