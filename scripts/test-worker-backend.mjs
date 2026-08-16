@@ -6,7 +6,10 @@ const recorded = { priceRows: [], emails: [] };
 
 const latestRows = [
   { country: "US", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 20, currency: "USD", display: "$20", usd_amount: 20, usd_monthly_equivalent: 20, source: "official", observed_at: "2026-08-04T00:00:00Z" },
-  { country: "IN", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 1499, currency: "INR", display: "₹1,499", usd_amount: 17.1, usd_monthly_equivalent: 17.1, source: "official", observed_at: "2026-08-04T01:00:00Z" }
+  { country: "US", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "annual", amount: 200, currency: "USD", display: "$200", usd_amount: 200, usd_monthly_equivalent: 16.67, source: "official", observed_at: "2026-08-04T00:00:00Z" },
+  { country: "IN", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 1499, currency: "INR", display: "₹1,499", usd_amount: 17.1, usd_monthly_equivalent: 17.1, source: "official", observed_at: "2026-08-04T01:00:00Z" },
+  { country: "ST", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 19.99, currency: "USD", display: "$19.99", usd_amount: 19.99, usd_monthly_equivalent: 19.99, source: "official", observed_at: "2026-08-04T02:00:00Z" },
+  { country: "ST", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "annual", amount: 19.99, currency: "USD", display: "$19.99", usd_amount: 19.99, usd_monthly_equivalent: 1.67, source: "official", observed_at: "2026-08-04T02:00:00Z" }
 ];
 
 const storePage = `
@@ -25,13 +28,18 @@ const indonesiaStorePage = `
   <div class="text-pair"><span>Claude Pro - Monthly</span><span>Rp 349ribu</span></div>
   <div class="text-pair"><span>Claude Pro - Annual</span><span>Rp 3,999juta</span></div>`;
 
+const duplicateMonthlyStorePage = `
+  <script type="application/ld+json">{"priceCurrency":"USD"}</script>
+  <div class="text-pair"><span>ChatGPT Plus</span><span>$19.99</span></div>
+  <div class="text-pair"><span>ChatGPT Plus</span><span>$19.99</span></div>`;
+
 globalThis.fetch = async (input, options = {}) => {
   const url = typeof input === "string" ? input : input.url;
   const method = options.method || "GET";
   if (url === "https://open.er-api.com/v6/latest/USD") {
     return Response.json({ result: "success", rates: { USD: 1, INR: 87.66 }, time_last_update_utc: "now" });
   }
-  if (url.startsWith("https://apps.apple.com/")) return new Response(url.includes("/id/app/") ? indonesiaStorePage : storePage);
+  if (url.startsWith("https://apps.apple.com/")) return new Response(url.includes("/id/app/") ? indonesiaStorePage : url.includes("/st/app/") ? duplicateMonthlyStorePage : storePage);
   if (url === "https://mail.test/emails") {
     recorded.emails.push(JSON.parse(options.body));
     return Response.json({ id: "email-1" });
@@ -68,8 +76,9 @@ try {
   const summaryResponse = await worker.fetch(new Request("https://site.test/api/global"), env);
   assert.equal(summaryResponse.status, 200);
   const summary = await summaryResponse.json();
-  assert.equal(summary.monitoredCountries, 2);
-  assert.equal(summary.minima[0].country, "IN");
+  assert.equal(summary.monitoredCountries, 3);
+  assert.equal(summary.minima.find((row) => row.billing_period === "monthly").country, "IN");
+  assert.equal(summary.minima.find((row) => row.billing_period === "annual").country, "US");
 
   const statusResponse = await worker.fetch(new Request("https://site.test/api/backend/status"), env);
   assert.equal(statusResponse.status, 200);
@@ -89,6 +98,11 @@ try {
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "plus").annual.amount, 3499000);
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "pro5").amount, 1889000);
   assert.equal(indonesia.prices.find((item) => item.provider === "anthropic").plans.find((plan) => plan.id === "pro").annual.amount, 3999000);
+
+  const duplicateMonthlyResponse = await worker.fetch(new Request("https://site.test/api/prices?country=ST"), env);
+  assert.equal(duplicateMonthlyResponse.status, 200);
+  const duplicateMonthly = await duplicateMonthlyResponse.json();
+  assert.equal(duplicateMonthly.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "plus").annual.status, "none");
 
   const alertResponse = await worker.fetch(new Request("https://site.test/api/alerts", {
     method: "POST",

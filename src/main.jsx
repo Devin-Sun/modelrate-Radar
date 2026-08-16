@@ -69,6 +69,12 @@ const annualComparison = (savingPercent) => {
   return "";
 };
 
+const isPlausibleAnnualPrice = (monthlyAmount, annualAmount) => {
+  if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0 || !Number.isFinite(annualAmount) || annualAmount <= 0) return false;
+  const billedMonths = annualAmount / monthlyAmount;
+  return billedMonths >= 6 && billedMonths <= 14;
+};
+
 const LOCAL_STORAGE_KEYS = {
   prices: "modelrate:latest-prices:v1",
   history: "modelrate:price-history:v1",
@@ -467,16 +473,19 @@ export default function App() {
     if (live?.status === "live" && live.plans) return live.plans.map((plan) => {
       const fx = rates[plan.currency || live.currency];
       const annualFx = rates[plan.annual?.currency || plan.currency || live.currency];
+      const annual = plan.annual?.status === "live" && !isPlausibleAnnualPrice(plan.amount, plan.annual.amount)
+        ? { status: "none", display: "仅月付" }
+        : plan.annual;
       return {
         ...plan,
         kind: "live",
         source: live.source,
         currency: plan.currency || live.currency,
         usd: Number.isFinite(plan.amount) && fx ? plan.amount / fx : null,
-        annual: plan.annual ? {
-          ...plan.annual,
-          usdTotal: Number.isFinite(plan.annual.amount) && annualFx ? plan.annual.amount / annualFx : null,
-          usdMonthlyEquivalent: Number.isFinite(plan.annual.monthlyEquivalent) && annualFx ? plan.annual.monthlyEquivalent / annualFx : null
+        annual: annual ? {
+          ...annual,
+          usdTotal: Number.isFinite(annual.amount) && annualFx ? annual.amount / annualFx : null,
+          usdMonthlyEquivalent: Number.isFinite(annual.monthlyEquivalent) && annualFx ? annual.monthlyEquivalent / annualFx : null
         } : null
       };
     });
@@ -823,6 +832,7 @@ export default function App() {
                         <strong className={`annual-minimum ${plan.annualMinimum?.status || "none"}`}>
                           <em>年付最低</em>{Number.isFinite(plan.annualMinimum?.usdTotal) ? `${usd(plan.annualMinimum.usdTotal)} / 年` : plan.annualMinimum?.display || "仅月付"}
                         </strong>
+                        {plan.annualMinimum?.code && <small>{flagFromCode(plan.annualMinimum.code)} {zhRegionNames.of(plan.annualMinimum.code)} · {plan.annualMinimum.display}</small>}
                         {Number.isFinite(plan.annualMinimum?.usdMonthlyEquivalent) && <small>折合 {usd(plan.annualMinimum.usdMonthlyEquivalent)} / 月{annualComparison(plan.annualMinimum.savingPercent)}</small>}
                       </span>
                     </div>)}

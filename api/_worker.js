@@ -1,4 +1,4 @@
-const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-B902U58x.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-o3a8_L0r.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-CBTqdluc.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-o3a8_L0r.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
@@ -53,6 +53,12 @@ const parseAmount = (display) => {
   return amount * compactMultiplier;
 };
 
+const isPlausibleAnnualPrice = (monthlyAmount, annualAmount) => {
+  if (!Number.isFinite(monthlyAmount) || monthlyAmount <= 0 || !Number.isFinite(annualAmount) || annualAmount <= 0) return false;
+  const billedMonths = annualAmount / monthlyAmount;
+  return billedMonths >= 6 && billedMonths <= 14;
+};
+
 async function fetchStorePrice(provider, country) {
   const config = APP_STORE_PRODUCTS[provider];
   const source = "https://apps.apple.com/" + country.toLowerCase() + "/app/" + config.slug + "/id" + config.id;
@@ -95,7 +101,7 @@ async function fetchStorePrice(provider, country) {
         ? pairs.filter((item) => item.name === plan.annualStoreProduct)[plan.annualStoreProductOccurrence || 0]
         : null;
       const annualAmount = annualSelected ? parseAmount(annualSelected.display) : null;
-      const annual = annualSelected ? {
+      const annual = annualSelected && isPlausibleAnnualPrice(amount, annualAmount) ? {
         status: "live",
         display: annualSelected.display,
         amount: annualAmount,
@@ -328,10 +334,18 @@ async function getGlobalSummary(env) {
   ]);
   const minima = new Map();
   const monitored = new Set();
+  const monthlyRows = new Map(rows.filter((row) => row.billing_period === "monthly").map((row) => [
+    row.country + ":" + row.provider + ":" + row.plan_id,
+    row
+  ]));
   let newest = null;
   for (const row of rows) {
     monitored.add(row.country);
     if (!newest || row.observed_at > newest) newest = row.observed_at;
+    if (row.billing_period === "annual") {
+      const monthly = monthlyRows.get(row.country + ":" + row.provider + ":" + row.plan_id);
+      if (!monthly || monthly.currency !== row.currency || !isPlausibleAnnualPrice(Number(monthly.amount), Number(row.amount))) continue;
+    }
     const key = row.provider + ":" + row.plan_id + ":" + row.billing_period;
     const current = minima.get(key);
     if (!current || Number(row.usd_monthly_equivalent) < Number(current.usd_monthly_equivalent)) minima.set(key, row);
