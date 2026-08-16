@@ -76,6 +76,15 @@ const LOCAL_STORAGE_KEYS = {
   alertEvents: "modelrate:alert-events:v1"
 };
 
+const CATALOG_PLAN_SORTS = [
+  { value: "plan:openai:plus", provider: "openai", planId: "plus", label: "ChatGPT Plus" },
+  { value: "plan:openai:pro5", provider: "openai", planId: "pro5", label: "ChatGPT Pro 5x" },
+  { value: "plan:openai:pro20", provider: "openai", planId: "pro20", label: "ChatGPT Pro 20x" },
+  { value: "plan:anthropic:pro", provider: "anthropic", planId: "pro", label: "Claude Pro" },
+  { value: "plan:anthropic:max5", provider: "anthropic", planId: "max5", label: "Claude Max 5x" },
+  { value: "plan:anthropic:max20", provider: "anthropic", planId: "max20", label: "Claude Max 20x" }
+];
+
 const readLocalJson = (key, fallback) => {
   if (typeof window === "undefined") return fallback;
   try { return JSON.parse(window.localStorage.getItem(key)) || fallback; }
@@ -675,30 +684,41 @@ export default function App() {
     }
   };
 
-  const catalogRows = useMemo(() => ISO_REGION_CODES.map((code) => {
-    const liveChecked = livePrices[code]?.prices?.some((price) => price.status === "live");
-    const lowest = lowestRegionPrice(code);
-    return {
-      code,
-      name: zhRegionNames.of(code),
-      englishName: enRegionNames.of(code),
-      flag: flagFromCode(code),
-      priced: Boolean(REGION_META[code]) || liveChecked,
-      lowestUsd: lowest?.plan.usd ?? Number.POSITIVE_INFINITY
-    };
-  }).filter((item) => {
-    const needle = catalogQuery.trim().toLowerCase();
-    const isRegionCode = /^[a-z]{2}$/.test(needle);
-    const matchesQuery = !needle || (isRegionCode
-      ? item.code.toLowerCase() === needle
-      : `${item.code} ${item.name} ${item.englishName}`.toLowerCase().includes(needle));
-    const matchesFilter = catalogFilter === "ALL"
-      || (catalogFilter === "PRICED" && item.priced)
-      || (PROVIDERS[catalogFilter] && OFFICIAL_SUPPORT[catalogFilter].has(item.code));
-    return matchesQuery && matchesFilter;
-  }).sort((a, b) => catalogSort === "priceAsc"
-    ? a.lowestUsd - b.lowestUsd || a.name.localeCompare(b.name, "zh-CN")
-    : a.name.localeCompare(b.name, "zh-CN")), [catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
+  const catalogRows = useMemo(() => {
+    const planSort = CATALOG_PLAN_SORTS.find((option) => option.value === catalogSort);
+    return ISO_REGION_CODES.map((code) => {
+      const liveChecked = livePrices[code]?.prices?.some((price) => price.status === "live");
+      const lowest = lowestRegionPrice(code);
+      const selectedPlan = planSort
+        ? getRegionPlanPrices(code, planSort.provider).find((plan) => plan.id === planSort.planId)
+        : null;
+      return {
+        code,
+        name: zhRegionNames.of(code),
+        englishName: enRegionNames.of(code),
+        flag: flagFromCode(code),
+        priced: Boolean(REGION_META[code]) || liveChecked,
+        lowestUsd: lowest?.plan.usd ?? Number.POSITIVE_INFINITY,
+        selectedPlanUsd: selectedPlan?.status === "live" && Number.isFinite(selectedPlan.usd) && selectedPlan.usd > 0
+          ? selectedPlan.usd
+          : Number.POSITIVE_INFINITY
+      };
+    }).filter((item) => {
+      const needle = catalogQuery.trim().toLowerCase();
+      const isRegionCode = /^[a-z]{2}$/.test(needle);
+      const matchesQuery = !needle || (isRegionCode
+        ? item.code.toLowerCase() === needle
+        : `${item.code} ${item.name} ${item.englishName}`.toLowerCase().includes(needle));
+      const matchesFilter = catalogFilter === "ALL"
+        || (catalogFilter === "PRICED" && item.priced)
+        || (PROVIDERS[catalogFilter] && OFFICIAL_SUPPORT[catalogFilter].has(item.code));
+      return matchesQuery && matchesFilter;
+    }).sort((a, b) => {
+      if (catalogSort === "priceAsc") return a.lowestUsd - b.lowestUsd || a.name.localeCompare(b.name, "zh-CN");
+      if (planSort) return a.selectedPlanUsd - b.selectedPlanUsd || a.name.localeCompare(b.name, "zh-CN");
+      return a.name.localeCompare(b.name, "zh-CN");
+    });
+  }, [catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
 
   const visibleCatalogRows = catalogExpanded || catalogQuery || catalogFilter !== "ALL"
     ? catalogRows
@@ -821,7 +841,7 @@ export default function App() {
             <div className="catalog-toolbar">
               <label className="catalog-search"><Search size={16} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索中文名、英文名或代码…" />{catalogQuery && <button onClick={() => setCatalogQuery("")} aria-label="清除搜索"><X size={15} /></button>}</label>
               <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 249 项</option><option value="openai">ChatGPT 可用地区</option><option value="anthropic">Claude 可用地区</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
-              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">订阅价格：从低到高</option></select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">最低付费套餐：从低到高</option>{CATALOG_PLAN_SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}：从低到高</option>)}</select><ChevronDown size={14} /></label>
             </div>
             <div className="table-scroll catalog-scroll">
               <table className="catalog-table">
