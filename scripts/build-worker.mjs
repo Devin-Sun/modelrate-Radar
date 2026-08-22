@@ -16,6 +16,8 @@ const REGION_CODES = ${JSON.stringify(ISO_REGION_CODES)};
 
 const priceCache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
+let rateCache = null;
+const RATE_CACHE_MS = 30 * 60 * 1000;
 
 const json = (data, status = 200) => new Response(JSON.stringify(data), {
   status,
@@ -133,9 +135,9 @@ async function fetchStorePrice(provider, country) {
   }
 }
 
-async function monitorCountry(country) {
+async function monitorCountry(country, forceFresh = false) {
   const cached = priceCache.get(country);
-  if (cached && Date.now() - cached.timestamp < CACHE_MS) return { ...cached.value, cached: true };
+  if (!forceFresh && cached && Date.now() - cached.timestamp < CACHE_MS) return { ...cached.value, cached: true };
   const prices = await Promise.all(Object.keys(APP_STORE_PRODUCTS).map((provider) => fetchStorePrice(provider, country)));
   const value = { country, checkedAt: new Date().toISOString(), prices, cached: false };
   priceCache.set(country, { timestamp: Date.now(), value });
@@ -143,6 +145,7 @@ async function monitorCountry(country) {
 }
 
 async function monitorSystem() {
+  if (rateCache && Date.now() - rateCache.timestamp < RATE_CACHE_MS) return { ...rateCache.value, cached: true };
   let rates = null;
   let fxUpdatedAt = null;
   try {
@@ -153,13 +156,15 @@ async function monitorSystem() {
       fxUpdatedAt = payload.time_last_update_utc;
     }
   } catch {}
-  return {
+  const value = {
     checkedAt: new Date().toISOString(),
     collector: "Apple App Store country storefronts",
-    intervalMinutes: 30,
+    intervalMinutes: 1440,
     rates,
     fxUpdatedAt
   };
+  if (rates) rateCache = { timestamp: Date.now(), value };
+  return value;
 }
 
 const databaseKey = (env) => env?.SUPABASE_SECRET_KEY || env?.SUPABASE_SERVICE_ROLE_KEY;
@@ -239,6 +244,85 @@ function normalizePriceRows(results, rates) {
     }
   }
   return normalized;
+}
+
+function latestRowsToResults(rows) {
+  const countries = new Map();
+  for (const row of rows) {
+    if (!APP_STORE_PRODUCTS[row.provider]) continue;
+    if (!countries.has(row.country)) countries.set(row.country, new Map());
+    const providers = countries.get(row.country);
+    if (!providers.has(row.provider)) providers.set(row.provider, []);
+    providers.get(row.provider).push(row);
+  }
+
+  return [...countries.entries()].map(([country, providers]) => {
+    const countryRows = [...providers.values()].flat();
+    const checkedAt = countryRows.reduce((newest, row) => !newest || row.observed_at > newest ? row.observed_at : newest, null);
+    const prices = [...providers.entries()].map(([provider, providerRows]) => {
+      const source = providerRows.find((row) => row.source)?.source
+        || "https://apps.apple.com/" + country.toLowerCase() + "/app/" + APP_STORE_PRODUCTS[provider].slug + "/id" + APP_STORE_PRODUCTS[provider].id;
+      const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
+        if (plan.kind === "reference") {
+          const savingPercent = plan.annualReferenceAmount
+            ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)
+            : null;
+          return {
+            ...plan,
+            status: "reference",
+            display: plan.referenceDisplay,
+            amount: plan.referenceAmount,
+            currency: "USD",
+            annual: plan.annualReferenceAmount ? {
+              status: "reference",
+              display: plan.annualReferenceDisplay,
+              amount: plan.annualReferenceAmount,
+              currency: "USD",
+              monthlyEquivalent: plan.annualReferenceAmount / 12,
+              savingPercent
+            } : { status: "none", display: "仅月付" }
+          };
+        }
+        if (plan.kind === "quote") return { ...plan, status: "quote", display: "官网询价", amount: null, currency: null, annual: { status: "quote", display: "官网询价" } };
+
+        const monthly = providerRows.find((row) => row.plan_id === plan.id && row.billing_period === "monthly");
+        const annualRow = providerRows.find((row) => row.plan_id === plan.id && row.billing_period === "annual");
+        if (!monthly) {
+          return {
+            ...plan,
+            status: "not_listed",
+            display: "数据库暂无价格",
+            amount: null,
+            currency: null,
+            annual: plan.annualKind === "login" ? { status: "login", display: "登录官网查看" } : { status: "none", display: "仅月付" }
+          };
+        }
+
+        const monthlyAmount = Number(monthly.amount);
+        const annualAmount = Number(annualRow?.amount);
+        const annual = annualRow && annualRow.currency === monthly.currency && isPlausibleAnnualPrice(monthlyAmount, annualAmount) ? {
+          status: "live",
+          display: annualRow.display,
+          amount: annualAmount,
+          currency: annualRow.currency,
+          monthlyEquivalent: annualAmount / 12,
+          savingPercent: Math.round((1 - annualAmount / 12 / monthlyAmount) * 100)
+        } : plan.annualKind === "login"
+          ? { status: "login", display: "登录官网查看" }
+          : { status: "none", display: "仅月付" };
+        return {
+          ...plan,
+          status: "live",
+          display: monthly.display,
+          amount: monthlyAmount,
+          currency: monthly.currency,
+          annual
+        };
+      });
+      return { provider, status: "live", currency: providerRows.find((row) => row.currency)?.currency || null, plans, channel: "数据库每日快照", source };
+    });
+    return { country, checkedAt, prices, cached: true };
+  });
 }
 
 async function claimScanBatch(env, limit) {
@@ -325,7 +409,7 @@ async function runBackgroundScan(env, origin, requestedLimit) {
   const system = await monitorSystem();
   if (!system.rates) throw new Error("exchange_rates_unavailable");
   const countries = await claimScanBatch(env, requestedLimit);
-  const results = await Promise.all(countries.map(monitorCountry));
+  const results = await Promise.all(countries.map((country) => monitorCountry(country, true)));
   const rows = normalizePriceRows(results, system.rates);
   const stored = await recordPriceRows(env, rows);
   const alerts = await processAlertDeliveries(env, origin);
@@ -362,6 +446,7 @@ async function getGlobalSummary(env) {
     monitoredCountries: monitored.size,
     latestPriceRows: rows.length,
     newestObservationAt: newest,
+    results: latestRowsToResults(rows),
     minima: [...minima.values()].sort((a, b) => Number(a.usd_monthly_equivalent) - Number(b.usd_monthly_equivalent))
   };
 }
@@ -444,7 +529,7 @@ export default {
       try {
         const state = (await supabaseRequest(env, "/rest/v1/scan_state?id=eq.1&select=last_batch_at,last_completed_at,last_error"))[0] || null;
         const lastBatchAge = state?.last_batch_at ? Date.now() - new Date(state.last_batch_at).getTime() : null;
-        const scheduler = !env?.SCAN_SECRET ? "not_configured" : lastBatchAge === null ? "waiting" : lastBatchAge < 3 * 60 * 1000 ? "running" : "stale";
+        const scheduler = !env?.SCAN_SECRET ? "not_configured" : lastBatchAge === null ? "waiting" : lastBatchAge < 26 * 60 * 60 * 1000 ? "daily" : "stale";
         return json({ configured: true, ready: true, database: "connected", email: env?.RESEND_API_KEY && env?.ALERT_FROM_EMAIL ? "connected" : "not_configured", scheduler, scan: state });
       } catch (error) {
         return json({ configured: true, ready: false, database: "error", email: env?.RESEND_API_KEY && env?.ALERT_FROM_EMAIL ? "connected" : "not_configured", scheduler: "unknown", error: String(error.message || error) });
@@ -502,7 +587,22 @@ export default {
         if (countries.length > 10 || countries.some((country) => !/^[A-Z]{2}$/.test(country))) {
           return json({ error: "invalid_countries" }, 400);
         }
-        return json({ results: await Promise.all([...new Set(countries)].map(monitorCountry)) });
+        const forceFresh = url.searchParams.get("fresh") === "1";
+        const shouldPersist = url.searchParams.get("persist") === "1";
+        if (shouldPersist && !backendConfigured(env)) return json({ error: "database_not_configured" }, 503);
+        try {
+          const results = await Promise.all([...new Set(countries)].map((country) => monitorCountry(country, forceFresh)));
+          let stored = null;
+          if (shouldPersist) {
+            const system = await monitorSystem();
+            if (!system.rates) throw new Error("exchange_rates_unavailable");
+            const rows = normalizePriceRows(results, system.rates);
+            stored = await recordPriceRows(env, rows);
+          }
+          return json({ results, stored });
+        } catch (error) {
+          return json({ error: String(error.message || error) }, 502);
+        }
       }
       const country = (url.searchParams.get("country") || "").toUpperCase();
       if (!/^[A-Z]{2}$/.test(country)) return json({ error: "invalid_country" }, 400);

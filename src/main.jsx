@@ -75,7 +75,6 @@ const isPlausibleAnnualPrice = (monthlyAmount, annualAmount) => {
 };
 
 const LOCAL_STORAGE_KEYS = {
-  prices: "modelrate:latest-prices:v1",
   history: "modelrate:price-history:v1",
   alertRules: "modelrate:alert-rules:v1",
   alertEvents: "modelrate:alert-events:v1"
@@ -187,7 +186,7 @@ function SideNav({ open, onClose, onAlerts, scanProgress, activeProvider, onProv
         <div className="sidebar-bottom">
           <div className="sync-card">
             <span className="sync-icon"><RefreshCw size={16} /></span>
-            <div><strong>{scanProgress.running ? "全球扫描进行中" : "本地自动监测"}</strong><small>{scanProgress.completed} / {scanProgress.total} 个地区</small></div>
+            <div><strong>{scanProgress.running ? "全球扫描进行中" : "数据库每日快照"}</strong><small>{scanProgress.completed} / {scanProgress.total} 个地区</small></div>
           </div>
           <a className="nav-item" href="#settings"><Settings size={18} />数据设置</a>
         </div>
@@ -263,9 +262,9 @@ export default function App() {
   const [catalogFilter, setCatalogFilter] = useState("ALL");
   const [catalogSort, setCatalogSort] = useState("name");
   const [catalogExpanded, setCatalogExpanded] = useState(false);
-  const [livePrices, setLivePrices] = useState(() => sanitizeCachedPrices(readLocalJson(LOCAL_STORAGE_KEYS.prices, {})));
+  const [livePrices, setLivePrices] = useState({});
   const [scanningCodes, setScanningCodes] = useState([]);
-  const [collectorStatus, setCollectorStatus] = useState("正在连接价格监测器");
+  const [collectorStatus, setCollectorStatus] = useState("正在读取数据库价格");
   const [backendStatus, setBackendStatus] = useState({ configured: false, database: "checking", email: "checking", scheduler: "checking" });
   const [globalSummary, setGlobalSummary] = useState(null);
   const [alertOpen, setAlertOpen] = useState(false);
@@ -307,7 +306,6 @@ export default function App() {
   useEffect(() => { ratesRef.current = rates; }, [rates]);
   useEffect(() => {
     livePricesRef.current = livePrices;
-    writeLocalJson(LOCAL_STORAGE_KEYS.prices, livePrices);
   }, [livePrices]);
   useEffect(() => {
     localAlertRulesRef.current = localAlertRules;
@@ -340,10 +338,23 @@ export default function App() {
       setBackendStatus(status);
       if (status.ready) {
         const summaryResponse = await fetch("/api/global", { cache: "no-store" });
-        if (summaryResponse.ok) setGlobalSummary(await summaryResponse.json());
+        if (!summaryResponse.ok) throw new Error("database prices unavailable");
+        const summary = await summaryResponse.json();
+        setGlobalSummary(summary);
+        if (Array.isArray(summary.results)) {
+          const databasePrices = sanitizeCachedPrices(Object.fromEntries(summary.results.map((result) => [result.country, result])));
+          livePricesRef.current = databasePrices;
+          setLivePrices(databasePrices);
+          setScanProgress({ running: false, completed: summary.monitoredCountries || 0, total: ISO_REGION_CODES.length });
+          setCollectorStatus(`已从数据库加载 · ${summary.monitoredCountries || 0} 个地区`);
+          if (summary.newestObservationAt) setLastUpdated(new Date(summary.newestObservationAt));
+        }
+      } else {
+        setCollectorStatus("数据库尚未连接，当前仅显示内置参考数据");
       }
     } catch {
       setBackendStatus({ configured: false, database: "offline", email: "offline", scheduler: "offline" });
+      setCollectorStatus("数据库读取失败，当前仅显示内置参考数据");
     }
   };
 
@@ -355,12 +366,9 @@ export default function App() {
       const payload = await response.json();
       if (payload.rates) setRates({ ...FALLBACK_RATES, ...payload.rates, USD: 1 });
       setRateStatus(payload.rates ? "全球汇率已同步" : "汇率使用最近快照");
-      setCollectorStatus("当地商店监测器在线");
     } catch {
       setRateStatus("使用最近一次汇率快照");
-      setCollectorStatus("监测器暂时离线");
     } finally {
-      setLastUpdated(new Date());
       window.setTimeout(() => setRefreshing(false), 450);
     }
   };
@@ -458,7 +466,7 @@ export default function App() {
     for (let index = 0; index < uniqueCodes.length; index += 10) {
       const batch = uniqueCodes.slice(index, index + 10);
       try {
-        const response = await fetch(`/api/prices?countries=${batch.join(",")}`, { cache: "no-store" });
+        const response = await fetch(`/api/prices?countries=${batch.join(",")}&fresh=1&persist=1`, { cache: "no-store" });
         if (!response.ok) throw new Error("price collector unavailable");
         const payload = await response.json();
         applyScanResults(payload.results);
@@ -479,28 +487,22 @@ export default function App() {
     }
     scanInProgressRef.current = false;
     setScanProgress({ running: false, completed: uniqueCodes.length, total: uniqueCodes.length });
-    setCollectorStatus(`全球扫描完成 · ${Object.keys(livePricesRef.current).length} 个地区已有结果`);
+    setCollectorStatus(`全球扫描完成并已写入数据库 · ${Object.keys(livePricesRef.current).length} 个地区已有结果`);
+    await fetchBackend();
   };
 
   useEffect(() => {
     fetchRates();
     fetchBackend();
     const timer = window.setInterval(fetchRates, 30 * 60 * 1000);
-    const backendTimer = window.setInterval(fetchBackend, 60 * 1000);
-    return () => { window.clearInterval(timer); window.clearInterval(backendTimer); };
-  }, []);
-
-  useEffect(() => {
-    scanRegions(ISO_REGION_CODES);
-    const timer = window.setInterval(() => scanRegions(ISO_REGION_CODES), 30 * 60 * 1000);
     return () => window.clearInterval(timer);
   }, []);
 
   const providerFallbackCheapest = useMemo(() =>
-    PRICE_SNAPSHOTS.filter((item) => item.provider === activeProvider).map((item) => ({
+    backendStatus.database !== "checking" && backendStatus.database !== "connected" ? PRICE_SNAPSHOTS.filter((item) => item.provider === activeProvider).map((item) => ({
       ...item,
       usd: item.amount / (rates[REGION_META[item.region].currency] || FALLBACK_RATES[REGION_META[item.region].currency])
-    })).sort((a, b) => a.usd - b.usd)[0], [activeProvider, rates]);
+    })).sort((a, b) => a.usd - b.usd)[0] : null, [activeProvider, backendStatus.database, rates]);
 
   const getRegionPlanPrices = (code, provider) => {
     const live = livePrices[code]?.prices?.find((item) => item.provider === provider);
@@ -524,7 +526,9 @@ export default function App() {
       };
     });
 
-    const snapshot = PRICE_SNAPSHOTS.find((item) => item.region === code && item.provider === provider);
+    const snapshot = backendStatus.database !== "checking" && backendStatus.database !== "connected"
+      ? PRICE_SNAPSHOTS.find((item) => item.region === code && item.provider === provider)
+      : null;
     const snapshotPlan = { openai: "plus", anthropic: "pro" }[provider];
     return SUBSCRIPTION_PLANS[provider].map((plan) => {
       if (plan.kind === "reference") return {
@@ -833,8 +837,8 @@ export default function App() {
             >
               <span className="saving-pill">汇率口径</span>
             </StatCard>
-            <StatCard label="全球自动扫描" value={scanProgress.running ? `${scanProgress.completed}/${scanProgress.total}` : scanProgress.completed ? "已完成" : "准备中"} note={scanProgress.running ? "网页打开期间持续采集当地价格" : "每 30 分钟重新扫描并计算最低价"} icon={ShieldCheck} accent="#bd8cff">
-              <div className="timestamp">{lastUpdated ? `最近更新 ${lastUpdated.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}` : "正在启动首次扫描"}</div>
+            <StatCard label="每日数据库扫描" value={scanProgress.running ? `${scanProgress.completed}/${scanProgress.total}` : "每日 00:00"} note={scanProgress.running ? "手动扫描全球并同步写入数据库" : "北京时间每天 00:00 启动；打开页面只读取数据库"} icon={ShieldCheck} accent="#bd8cff">
+              <div className="timestamp">{lastUpdated ? `数据库最近更新 ${lastUpdated.toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "正在读取数据库快照"}</div>
             </StatCard>
           </section>
 
@@ -943,7 +947,7 @@ export default function App() {
             <button type="button" className="modal-close" onClick={() => setAlertOpen(false)} aria-label="关闭"><X size={19} /></button>
             <span className="modal-badge"><Bell size={18} /></span>
             <h2>订阅降价提醒</h2>
-            <p>{backendStatus.ready ? "价格下降达到你设置的幅度时发送邮件。首次订阅需要点击邮件确认。" : "提醒规则保存在当前浏览器。网页打开并完成扫描后，如发现降价会发送浏览器通知。"}</p>
+            <p>{backendStatus.ready ? "价格下降达到你设置的幅度时发送邮件。首次订阅需要点击邮件确认。" : "提醒规则保存在当前浏览器。手动点击扫描全球后，如发现降价会发送浏览器通知。"}</p>
             <div className="form-grid">
               {backendStatus.ready && <label className="wide">邮箱<input required type="email" value={alertForm.email} onChange={(event) => setAlertForm({ ...alertForm, email: event.target.value })} placeholder="name@example.com" /></label>}
               <label>厂商<select value={alertForm.provider} onChange={(event) => { const provider = event.target.value; setAlertForm({ ...alertForm, provider, planId: "", country: !provider || !alertForm.country || availabilityFor(provider, alertForm.country).kind !== "unlisted" ? alertForm.country : "" }); }}><option value="">全部厂商</option>{Object.entries(PROVIDERS).map(([id, provider]) => <option key={id} value={id}>{provider.name}</option>)}</select></label>

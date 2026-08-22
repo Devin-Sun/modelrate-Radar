@@ -37,7 +37,7 @@ globalThis.fetch = async (input, options = {}) => {
   const url = typeof input === "string" ? input : input.url;
   const method = options.method || "GET";
   if (url === "https://open.er-api.com/v6/latest/USD") {
-    return Response.json({ result: "success", rates: { USD: 1, INR: 87.66 }, time_last_update_utc: "now" });
+    return Response.json({ result: "success", rates: { USD: 1, INR: 87.66, IDR: 16200 }, time_last_update_utc: "now" });
   }
   if (url.startsWith("https://apps.apple.com/")) return new Response(url.includes("/id/app/") ? indonesiaStorePage : url.includes("/st/app/") ? duplicateMonthlyStorePage : storePage);
   if (url === "https://mail.test/emails") {
@@ -85,6 +85,10 @@ try {
   assert.equal(summary.monitoredCountries, 3);
   assert.equal(summary.minima.find((row) => row.billing_period === "monthly").country, "IN");
   assert.equal(summary.minima.find((row) => row.billing_period === "annual").country, "US");
+  const databaseUsPlus = summary.results.find((result) => result.country === "US").prices
+    .find((price) => price.provider === "openai").plans.find((plan) => plan.id === "plus");
+  assert.equal(databaseUsPlus.amount, 20);
+  assert.equal(databaseUsPlus.annual.amount, 200);
 
   const statusResponse = await worker.fetch(new Request("https://site.test/api/backend/status"), env);
   assert.equal(statusResponse.status, 200);
@@ -104,6 +108,12 @@ try {
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "plus").annual.amount, 3499000);
   assert.equal(indonesia.prices.find((item) => item.provider === "openai").plans.find((plan) => plan.id === "pro5").amount, 1889000);
   assert.equal(indonesia.prices.find((item) => item.provider === "anthropic").plans.find((plan) => plan.id === "pro").annual.amount, 3999000);
+
+  const persistedManualResponse = await worker.fetch(new Request("https://site.test/api/prices?countries=ID&fresh=1&persist=1"), env);
+  assert.equal(persistedManualResponse.status, 200);
+  const persistedManual = await persistedManualResponse.json();
+  assert.ok(persistedManual.stored);
+  assert.ok(recorded.priceRows.some((row) => row.country === "ID" && row.provider === "openai" && row.plan_id === "plus"));
 
   const duplicateMonthlyResponse = await worker.fetch(new Request("https://site.test/api/prices?country=ST"), env);
   assert.equal(duplicateMonthlyResponse.status, 200);

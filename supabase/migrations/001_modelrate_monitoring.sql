@@ -309,7 +309,7 @@ begin
   if existing_job is not null then perform cron.unschedule(existing_job); end if;
   perform cron.schedule(
     'modelrate-global-scan',
-    '*/1 * * * *',
+    '0-24 16 * * *',
     $job$
       select net.http_post(
         url := (select decrypted_secret from vault.decrypted_secrets where name = 'modelrate_site_url') || '/api/jobs/scan',
@@ -322,7 +322,7 @@ begin
       );
     $job$
   );
-  return 'modelrate-global-scan scheduled every minute; a 249-region cycle completes in about 25 minutes';
+  return 'modelrate-global-scan starts daily at 00:00 Asia/Shanghai; 25 ten-region batches complete in about 25 minutes';
 end;
 $$;
 
