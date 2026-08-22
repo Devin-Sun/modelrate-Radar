@@ -69,7 +69,7 @@ const env = {
   SCAN_SECRET: "scan-secret",
   RESEND_API_KEY: "resend-key",
   RESEND_API_URL: "https://mail.test/emails",
-  ALERT_FROM_EMAIL: "ModelRate <alerts@example.com>"
+  ALERT_FROM_EMAIL: "AI Price Radar <alerts@example.com>"
 };
 
 try {

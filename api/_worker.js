@@ -1,4 +1,4 @@
-const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-DhOrk4v1.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-D9mx-q-x.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>AI Price Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-Bp9T7XU_.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-DyJrR4y3.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
@@ -66,7 +66,7 @@ async function fetchStorePrice(provider, country) {
   const source = "https://apps.apple.com/" + country.toLowerCase() + "/app/" + config.slug + "/id" + config.id;
   try {
     const response = await fetch(source, {
-      headers: { "user-agent": "Mozilla/5.0 (compatible; ModelRateRadar/1.0)" },
+      headers: { "user-agent": "Mozilla/5.0 (compatible; AIPriceRadar/1.0)" },
       signal: AbortSignal.timeout(12000)
     });
     if (!response.ok) return { provider, status: "unavailable", source, httpStatus: response.status };
@@ -167,7 +167,7 @@ const backendConfigured = (env) => Boolean(env?.SUPABASE_URL && databaseKey(env)
 const supabaseHeaders = (env, extra = {}) => ({
   apikey: databaseKey(env),
   "content-type": "application/json",
-  "user-agent": "ModelRateRadar/1.0",
+  "user-agent": "AIPriceRadar/1.0",
   ...extra
 });
 
@@ -348,7 +348,7 @@ async function sendEmail(env, payload) {
     headers: {
       authorization: "Bearer " + env.RESEND_API_KEY,
       "content-type": "application/json",
-      "user-agent": "ModelRateRadar/1.0",
+      "user-agent": "AIPriceRadar/1.0",
       ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {})
     },
     body: JSON.stringify({ from: env.ALERT_FROM_EMAIL, ...emailPayload }),
@@ -379,7 +379,7 @@ async function processAlertDeliveries(env, origin) {
           "<p>原折合月价：US$" + Number(delivery.previous_usd_monthly).toFixed(2) +
           "<br>当前折合月价：US$" + Number(delivery.current_usd_monthly).toFixed(2) +
           "<br>降幅：" + Number(delivery.drop_percent).toFixed(2) + "%</p>" +
-          "<p><a href='" + origin + "'>查看全球价格雷达</a></p>" +
+          "<p><a href='" + origin + "'>查看 AI 订阅价格雷达</a></p>" +
           "<p style='font-size:12px;color:#667'><a href='" + unsubscribeUrl + "'>退订此提醒</a></p>"
       });
       await supabaseRequest(env, "/rest/v1/alert_deliveries?id=eq." + delivery.delivery_id, {
@@ -483,7 +483,7 @@ async function createAlertSubscription(env, origin, request) {
   await sendEmail(env, {
     idempotencyKey: "confirm-alert-" + subscription.id,
     to: [email],
-    subject: "确认订阅 ModelRate 降价提醒",
+    subject: "确认订阅 AI Price Radar 降价提醒",
     html: "<h2>确认降价提醒</h2><p>点击下面的按钮确认订阅：</p>" +
       "<p><a href='" + confirmationUrl + "' style='display:inline-block;padding:10px 16px;background:#18b98b;color:white;text-decoration:none;border-radius:6px'>确认订阅</a></p>" +
       "<p>只有价格下降达到 " + threshold + "% 时才会通知你。</p>"
@@ -509,7 +509,7 @@ async function updateSubscriptionByToken(env, token, action) {
 
 const messagePage = (title, message) => new Response("<!doctype html><meta charset='utf-8'><title>" + escapeHtml(title) +
   "</title><style>body{font-family:system-ui;background:#071018;color:#eaf3f3;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:520px;padding:36px;border:1px solid #234;border-radius:16px;background:#0d1d26}a{color:#2ce0b0}</style>" +
-  "<main><h1>" + escapeHtml(title) + "</h1><p>" + escapeHtml(message) + "</p><a href='/'>返回价格雷达</a></main>",
+  "<main><h1>" + escapeHtml(title) + "</h1><p>" + escapeHtml(message) + "</p><a href='/'>返回 AI 订阅价格雷达</a></main>",
   { headers: { "content-type": "text/html; charset=utf-8" } });
 
 export default {
