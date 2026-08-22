@@ -73,6 +73,12 @@ const env = {
 };
 
 try {
+  for (const path of ["/openai", "/claude"]) {
+    const pageResponse = await worker.fetch(new Request(`https://site.test${path}`), env);
+    assert.equal(pageResponse.status, 200);
+    assert.match(pageResponse.headers.get("content-type"), /text\/html/);
+  }
+
   const summaryResponse = await worker.fetch(new Request("https://site.test/api/global"), env);
   assert.equal(summaryResponse.status, 200);
   const summary = await summaryResponse.json();

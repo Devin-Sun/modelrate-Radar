@@ -508,7 +508,7 @@ export default {
       if (!/^[A-Z]{2}$/.test(country)) return json({ error: "invalid_country" }, 400);
       return json(await monitorCountry(country));
     }
-    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+    if (request.method === "GET" && ["/", "/index.html", "/openai", "/openai/", "/claude", "/claude/"].includes(url.pathname)) {
       return new Response(html, {
         headers: {
           "content-type": "text/html; charset=utf-8",

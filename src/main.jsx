@@ -13,7 +13,6 @@ import {
   Globe2,
   History,
   Info,
-  LayoutDashboard,
   Mail,
   Menu,
   RefreshCw,
@@ -91,6 +90,27 @@ const CATALOG_PLAN_SORTS = [
   { value: "plan:anthropic:max20", provider: "anthropic", planId: "max20", label: "Claude Max 20x" }
 ];
 
+const PROVIDER_PAGES = {
+  openai: {
+    path: "/openai",
+    navLabel: "OpenAI / ChatGPT",
+    title: "OpenAI 全球订阅价格",
+    description: "按国家查询 ChatGPT 各档套餐的月付与年付价格，并以实时汇率比较实际成本和年付折扣。",
+    tableTitle: "ChatGPT 全球价格监测表",
+    product: "ChatGPT"
+  },
+  anthropic: {
+    path: "/claude",
+    navLabel: "Anthropic / Claude",
+    title: "Claude 全球订阅价格",
+    description: "按国家查询 Claude 各档套餐的月付与年付价格，并以实时汇率比较实际成本和年付折扣。",
+    tableTitle: "Claude 全球价格监测表",
+    product: "Claude"
+  }
+};
+
+const providerFromPath = (pathname) => pathname.replace(/\/+$/, "") === PROVIDER_PAGES.anthropic.path ? "anthropic" : "openai";
+
 const readLocalJson = (key, fallback) => {
   if (typeof window === "undefined") return fallback;
   try { return JSON.parse(window.localStorage.getItem(key)) || fallback; }
@@ -143,7 +163,7 @@ function Sparkline({ provider, accent }) {
   );
 }
 
-function SideNav({ open, onClose, onAlerts, scanProgress }) {
+function SideNav({ open, onClose, onAlerts, scanProgress, activeProvider, onProviderChange }) {
   return (
     <>
       <aside className={`sidebar ${open ? "open" : ""}`}>
@@ -156,8 +176,12 @@ function SideNav({ open, onClose, onAlerts, scanProgress }) {
           <button className="mobile-close" onClick={onClose} aria-label="关闭菜单"><X size={19} /></button>
         </div>
         <nav>
-          <a className="nav-item active" href="#dashboard"><LayoutDashboard size={18} />价格总览</a>
-          <a className="nav-item" href="#catalog"><Globe2 size={18} />完整地区目录</a>
+          {Object.entries(PROVIDER_PAGES).map(([provider, page]) => (
+            <button className={`nav-item nav-button ${activeProvider === provider ? "active" : ""}`} key={provider} onClick={() => onProviderChange(provider)}>
+              <ProviderMark id={provider} size="tiny" />{page.navLabel}
+            </button>
+          ))}
+          <a className="nav-item" href="#catalog" onClick={onClose}><Globe2 size={18} />当前厂商地区目录</a>
           <button className="nav-item nav-button" onClick={() => { onAlerts(); onClose(); }}><Bell size={18} />降价提醒<span className="ready">本地</span></button>
           <a className="nav-item" href="#tools"><Sparkles size={18} />合规工具</a>
         </nav>
@@ -227,12 +251,9 @@ function PriceMonitorCell({ provider, plans, supported, scanning, country, onHis
 }
 
 export default function App() {
+  const [activeProvider, setActiveProvider] = useState(() => providerFromPath(typeof window === "undefined" ? "/openai" : window.location.pathname));
   const [rates, setRates] = useState(FALLBACK_RATES);
   const [rateStatus, setRateStatus] = useState("正在连接实时汇率");
-  const [selectedProviders, setSelectedProviders] = useState(Object.keys(PROVIDERS));
-  const [region, setRegion] = useState("ALL");
-  const [query, setQuery] = useState("");
-  const [sort, setSort] = useState("price");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -249,7 +270,7 @@ export default function App() {
   const [backendStatus, setBackendStatus] = useState({ configured: false, database: "checking", email: "checking", scheduler: "checking" });
   const [globalSummary, setGlobalSummary] = useState(null);
   const [alertOpen, setAlertOpen] = useState(false);
-  const [alertForm, setAlertForm] = useState({ email: "", provider: "", planId: "", country: "", thresholdPercent: 1 });
+  const [alertForm, setAlertForm] = useState({ email: "", provider: activeProvider, planId: "", country: "", thresholdPercent: 1 });
   const [alertMessage, setAlertMessage] = useState("");
   const [alertSending, setAlertSending] = useState(false);
   const [historyTarget, setHistoryTarget] = useState(null);
@@ -261,6 +282,23 @@ export default function App() {
   const ratesRef = useRef(rates);
   const localAlertRulesRef = useRef(localAlertRules);
   const scanInProgressRef = useRef(false);
+  const activePage = PROVIDER_PAGES[activeProvider];
+  const activePlanSorts = CATALOG_PLAN_SORTS.filter((option) => option.provider === activeProvider);
+
+  const changeProviderPage = (provider) => {
+    if (!PROVIDER_PAGES[provider]) return;
+    setActiveProvider(provider);
+    setCatalogQuery("");
+    setCatalogFilter("ALL");
+    setCatalogSort("name");
+    setCatalogExpanded(false);
+    setAlertForm((current) => ({ ...current, provider, planId: "" }));
+    setMenuOpen(false);
+    if (window.location.pathname !== PROVIDER_PAGES[provider].path) {
+      window.history.pushState({ provider }, "", PROVIDER_PAGES[provider].path);
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   useEffect(() => { ratesRef.current = rates; }, [rates]);
   useEffect(() => {
@@ -271,6 +309,25 @@ export default function App() {
     localAlertRulesRef.current = localAlertRules;
     writeLocalJson(LOCAL_STORAGE_KEYS.alertRules, localAlertRules);
   }, [localAlertRules]);
+
+  useEffect(() => {
+    const syncProviderFromUrl = () => {
+      const provider = providerFromPath(window.location.pathname);
+      setActiveProvider(provider);
+      setCatalogFilter("ALL");
+      setCatalogSort("name");
+      setAlertForm((current) => ({ ...current, provider, planId: "" }));
+    };
+    if (window.location.pathname === "/" || window.location.pathname === "/index.html") {
+      window.history.replaceState({ provider: activeProvider }, "", PROVIDER_PAGES[activeProvider].path + window.location.hash);
+    }
+    window.addEventListener("popstate", syncProviderFromUrl);
+    return () => window.removeEventListener("popstate", syncProviderFromUrl);
+  }, []);
+
+  useEffect(() => {
+    document.title = `${activePage.title} — ModelRate Radar`;
+  }, [activePage.title]);
 
   const fetchBackend = async () => {
     try {
@@ -435,38 +492,11 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const rows = useMemo(() => {
-    const hydrated = PRICE_SNAPSHOTS.map((item) => {
-      const meta = REGION_META[item.region];
-      const fx = rates[meta.currency] || FALLBACK_RATES[meta.currency];
-      return { ...item, meta, usd: item.amount / fx };
-    }).filter((item) => {
-      const provider = PROVIDERS[item.provider];
-      const matchesProvider = selectedProviders.includes(item.provider);
-      const matchesRegion = region === "ALL" || item.region === region;
-      const haystack = `${item.meta.name} ${item.meta.currency} ${provider.name} ${provider.product}`.toLowerCase();
-      return matchesProvider && matchesRegion && haystack.includes(query.toLowerCase());
-    });
-
-    return hydrated.sort((a, b) => {
-      if (sort === "provider") return PROVIDERS[a.provider].name.localeCompare(PROVIDERS[b.provider].name);
-      if (sort === "region") return a.meta.name.localeCompare(b.meta.name, "zh-CN");
-      return a.usd - b.usd;
-    });
-  }, [rates, selectedProviders, region, query, sort]);
-
-  const cheapest = rows[0];
-  const overall = useMemo(() =>
-    PRICE_SNAPSHOTS.map((item) => ({
+  const providerFallbackCheapest = useMemo(() =>
+    PRICE_SNAPSHOTS.filter((item) => item.provider === activeProvider).map((item) => ({
       ...item,
       usd: item.amount / (rates[REGION_META[item.region].currency] || FALLBACK_RATES[REGION_META[item.region].currency])
-    })).sort((a, b) => a.usd - b.usd)[0], [rates]);
-
-  const averages = useMemo(() => Object.keys(PROVIDERS).map((provider) => {
-    const items = PRICE_SNAPSHOTS.filter((item) => item.provider === provider);
-    const avg = items.reduce((sum, item) => sum + item.amount / (rates[REGION_META[item.region].currency] || FALLBACK_RATES[REGION_META[item.region].currency]), 0) / items.length;
-    return { provider, avg };
-  }), [rates]);
+    })).sort((a, b) => a.usd - b.usd)[0], [activeProvider, rates]);
 
   const getRegionPlanPrices = (code, provider) => {
     const live = livePrices[code]?.prices?.find((item) => item.provider === provider);
@@ -539,19 +569,20 @@ export default function App() {
     });
   };
 
-  const lowestRegionPrice = (code) => Object.keys(PROVIDERS)
-    .filter((provider) => availabilityFor(provider, code).kind !== "unlisted")
-    .flatMap((provider) => getRegionPlanPrices(code, provider).map((plan) => ({ provider, plan })))
+  const lowestRegionPrice = (code) => availabilityFor(activeProvider, code).kind !== "unlisted"
+    ? getRegionPlanPrices(code, activeProvider)
+      .map((plan) => ({ provider: activeProvider, plan }))
+      .filter((item) => item.plan?.status === "live" && Number.isFinite(item.plan?.usd) && item.plan.usd > 0)
+      .sort((a, b) => a.plan.usd - b.plan.usd)[0]
+    : null;
+
+  const browserGlobalCheapest = ISO_REGION_CODES
+    .filter((code) => availabilityFor(activeProvider, code).kind !== "unlisted")
+    .flatMap((code) => getRegionPlanPrices(code, activeProvider).map((plan) => ({ code, provider: activeProvider, plan })))
     .filter((item) => item.plan?.status === "live" && Number.isFinite(item.plan?.usd) && item.plan.usd > 0)
     .sort((a, b) => a.plan.usd - b.plan.usd)[0];
 
-  const browserGlobalCheapest = ISO_REGION_CODES.flatMap((code) => Object.keys(PROVIDERS)
-    .filter((provider) => availabilityFor(provider, code).kind !== "unlisted")
-    .flatMap((provider) => getRegionPlanPrices(code, provider).map((plan) => ({ code, provider, plan }))))
-    .filter((item) => item.plan?.status === "live" && Number.isFinite(item.plan?.usd) && item.plan.usd > 0)
-    .sort((a, b) => a.plan.usd - b.plan.usd)[0];
-
-  const storedGlobalCheapest = globalSummary?.minima?.filter((item) => Number(item.usd_monthly_equivalent) > 0)
+  const storedGlobalCheapest = globalSummary?.minima?.filter((item) => item.provider === activeProvider && Number(item.usd_monthly_equivalent) > 0)
     .sort((a, b) => Number(a.usd_monthly_equivalent) - Number(b.usd_monthly_equivalent))[0];
   const globalCheapest = storedGlobalCheapest ? {
     code: storedGlobalCheapest.country,
@@ -564,7 +595,7 @@ export default function App() {
     item
   ])), [globalSummary]);
 
-  const providerPlanMinimums = useMemo(() => Object.keys(PROVIDERS).map((provider) => ({
+  const providerPlanMinimums = useMemo(() => [activeProvider].map((provider) => ({
     provider,
     plans: SUBSCRIPTION_PLANS[provider].map((definition) => {
       if (definition.kind === "reference") return {
@@ -629,7 +660,7 @@ export default function App() {
         ? { ...definition, ...monthlyMinimum, annualMinimum: databaseAnnual }
         : { ...definition, display: "暂无当地价", usd: null, status: "pending", annualMinimum };
     }).sort((a, b) => planSortValue(a) - planSortValue(b))
-  })), [livePrices, rates, storedMinimums]);
+  })), [activeProvider, livePrices, rates, storedMinimums]);
 
   const openHistory = async (target) => {
     setHistoryTarget(target);
@@ -694,9 +725,9 @@ export default function App() {
   };
 
   const catalogRows = useMemo(() => {
-    const planSort = CATALOG_PLAN_SORTS.find((option) => option.value === catalogSort);
+    const planSort = activePlanSorts.find((option) => option.value === catalogSort);
     return ISO_REGION_CODES.map((code) => {
-      const liveChecked = livePrices[code]?.prices?.some((price) => price.status === "live");
+      const liveChecked = livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live");
       const lowest = lowestRegionPrice(code);
       const selectedPlan = planSort
         ? getRegionPlanPrices(code, planSort.provider).find((plan) => plan.id === planSort.planId)
@@ -720,26 +751,18 @@ export default function App() {
         : `${item.code} ${item.name} ${item.englishName}`.toLowerCase().includes(needle));
       const matchesFilter = catalogFilter === "ALL"
         || (catalogFilter === "PRICED" && item.priced)
-        || (PROVIDERS[catalogFilter] && OFFICIAL_SUPPORT[catalogFilter].has(item.code));
+        || (catalogFilter === "SUPPORTED" && OFFICIAL_SUPPORT[activeProvider].has(item.code));
       return matchesQuery && matchesFilter;
     }).sort((a, b) => {
       if (catalogSort === "priceAsc") return a.lowestUsd - b.lowestUsd || a.name.localeCompare(b.name, "zh-CN");
       if (planSort) return a.selectedPlanUsd - b.selectedPlanUsd || a.name.localeCompare(b.name, "zh-CN");
       return a.name.localeCompare(b.name, "zh-CN");
     });
-  }, [catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
+  }, [activeProvider, catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
 
   const visibleCatalogRows = catalogExpanded || catalogQuery || catalogFilter !== "ALL"
     ? catalogRows
     : catalogRows.slice(0, 50);
-
-  const toggleProvider = (provider) => {
-    setSelectedProviders((current) =>
-      current.includes(provider)
-        ? current.length === 1 ? current : current.filter((item) => item !== provider)
-        : [...current, provider]
-    );
-  };
 
   const generateAlias = () => {
     const words = ["radar", "orbit", "signal", "atlas", "pixel", "nova"];
@@ -758,7 +781,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <SideNav open={menuOpen} onClose={() => setMenuOpen(false)} onAlerts={() => setAlertOpen(true)} scanProgress={scanProgress} />
+      <SideNav open={menuOpen} onClose={() => setMenuOpen(false)} onAlerts={() => setAlertOpen(true)} scanProgress={scanProgress} activeProvider={activeProvider} onProviderChange={changeProviderPage} />
       <main>
         <header className="topbar">
           <button className="menu-button" onClick={() => setMenuOpen(true)} aria-label="打开菜单"><Menu size={21} /></button>
@@ -777,9 +800,12 @@ export default function App() {
         <div className="content" id="dashboard">
           <section className="page-title">
             <div>
+              <div className="provider-page-switcher" aria-label="选择厂商">
+                {Object.entries(PROVIDER_PAGES).map(([provider, page]) => <button key={provider} className={activeProvider === provider ? "active" : ""} aria-pressed={activeProvider === provider} onClick={() => changeProviderPage(provider)}><ProviderMark id={provider} size="tiny" />{page.product}</button>)}
+              </div>
               <div className="eyebrow"><span /> GLOBAL SUBSCRIPTION INTELLIGENCE</div>
-              <h1>全球 AI 订阅价格雷达</h1>
-              <p>按国家查询两款官方应用的月付与年付价格，并以实时汇率比较实际成本和年付折扣。</p>
+              <h1>{activePage.title}</h1>
+              <p>{activePage.description}</p>
             </div>
             <button className="refresh-button" onClick={() => { fetchRates(); scanRegions(ISO_REGION_CODES); }} disabled={refreshing || scanProgress.running}>
               <RefreshCw className={refreshing || scanProgress.running ? "spin" : ""} size={17} />
@@ -788,9 +814,9 @@ export default function App() {
           </section>
 
           <section className="stats-grid">
-            <StatCard label="监测服务" value="2" note="OpenAI · Anthropic" icon={SlidersHorizontal} accent="#38e2b3">
+            <StatCard label="当前厂商" value={activePage.product} note={PROVIDERS[activeProvider].name} icon={SlidersHorizontal} accent={PROVIDERS[activeProvider].color}>
               <div className="provider-stack">
-                {Object.keys(PROVIDERS).map((id) => <ProviderMark key={id} id={id} size="small" />)}
+                <ProviderMark id={activeProvider} size="small" />
               </div>
             </StatCard>
             <StatCard label="国家与地区目录" value="249" note={`${Object.keys(livePrices).length} 个地区已有本地缓存`} icon={Globe2} accent="#7aa7ff">
@@ -798,8 +824,8 @@ export default function App() {
             </StatCard>
             <StatCard
               label="当前最低可比价"
-              value={globalCheapest ? usd(globalCheapest.plan.usd) : usd(overall.usd)}
-              note={globalCheapest ? `${flagFromCode(globalCheapest.code)} ${zhRegionNames.of(globalCheapest.code)} · ${PROVIDERS[globalCheapest.provider].name} ${globalCheapest.plan.name}` : `${REGION_META[overall.region].flag} ${REGION_META[overall.region].name}`}
+              value={globalCheapest ? usd(globalCheapest.plan.usd) : providerFallbackCheapest ? usd(providerFallbackCheapest.usd) : "等待价格"}
+              note={globalCheapest ? `${flagFromCode(globalCheapest.code)} ${zhRegionNames.of(globalCheapest.code)} · ${PROVIDERS[globalCheapest.provider].name} ${globalCheapest.plan.name}` : providerFallbackCheapest ? `${REGION_META[providerFallbackCheapest.region].flag} ${REGION_META[providerFallbackCheapest.region].name}` : "正在采集当前厂商价格"}
               icon={ArrowDownRight}
               accent="#ffd56a"
             >
@@ -812,10 +838,10 @@ export default function App() {
 
           <section className="panel coverage-panel">
             <div className="panel-heading">
-              <div><h2>两家厂商月付 / 年付最低价</h2><p>比较官网公开价与当前已监测的 {Object.keys(livePrices).length} 个国家和地区的 iOS 当地价；年付按总价和折合月价同时展示。</p></div>
+              <div><h2>{activePage.product} 月付 / 年付最低价</h2><p>比较官网公开价与当前已监测的 {Object.keys(livePrices).length} 个国家和地区的 iOS 当地价；年付按总价和折合月价同时展示。</p></div>
               <span className="coverage-verified"><ShieldCheck size={14} />实时汇率折算</span>
             </div>
-            <div className="coverage-grid">
+            <div className="coverage-grid single-provider">
               {providerPlanMinimums.map(({ provider: id, plans }) => {
                 const coverage = COVERAGE_SUMMARY[id];
                 return <article className="coverage-card plan-minimum-card" key={id}>
@@ -845,17 +871,17 @@ export default function App() {
 
           <section className="panel catalog-panel" id="catalog">
             <div className="panel-heading catalog-heading">
-              <div><h2>全球价格监测表</h2><p>完整目录与价格明细已合并；每个套餐同时显示月付、年付总价、折合月价和折扣。</p></div>
+              <div><h2>{activePage.tableTitle}</h2><p>当前页面只展示 {activePage.product} 套餐；每个套餐同时显示月付、年付总价、折合月价和折扣。</p></div>
               <span className="catalog-total"><i />{collectorStatus}</span>
             </div>
             <div className="catalog-toolbar">
               <label className="catalog-search"><Search size={16} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索中文名、英文名或代码…" />{catalogQuery && <button onClick={() => setCatalogQuery("")} aria-label="清除搜索"><X size={15} /></button>}</label>
-              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 249 项</option><option value="openai">ChatGPT 可用地区</option><option value="anthropic">Claude 可用地区</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
-              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">最低付费套餐：从低到高</option>{CATALOG_PLAN_SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}：从低到高</option>)}</select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 249 项</option><option value="SUPPORTED">{activePage.product} 可用地区</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">最低付费套餐：从低到高</option>{activePlanSorts.map((option) => <option key={option.value} value={option.value}>{option.label}：从低到高</option>)}</select><ChevronDown size={14} /></label>
             </div>
             <div className="table-scroll catalog-scroll">
-              <table className="catalog-table">
-                <thead><tr><th><span className="region-column-head">国家 / 地区</span></th>{Object.entries(PROVIDERS).map(([provider, details]) => <th key={provider}><div className={`provider-column-head ${provider}`}><ProviderMark id={provider} size="tiny" /><div><strong>{details.name} 全部套餐</strong><small>{SUBSCRIPTION_PLANS[provider].length} 个订阅级别</small></div></div></th>)}<th><span className="lowest-column-head">本地区最低付费套餐</span></th></tr></thead>
+              <table className={`catalog-table single-provider ${activeProvider}`}>
+                <thead><tr><th><span className="region-column-head">国家 / 地区</span></th><th><div className={`provider-column-head ${activeProvider}`}><ProviderMark id={activeProvider} size="tiny" /><div><strong>{PROVIDERS[activeProvider].name} 全部套餐</strong><small>{SUBSCRIPTION_PLANS[activeProvider].length} 个订阅级别</small></div></div></th><th><span className="lowest-column-head">本地区最低付费套餐</span></th></tr></thead>
                 <tbody>
                   {visibleCatalogRows.map((item) => {
                     const lowest = lowestRegionPrice(item.code);
@@ -863,7 +889,7 @@ export default function App() {
                     return (
                       <tr key={item.code}>
                         <td><div className="region-cell"><span>{item.flag}</span><div><strong>{item.name}</strong><small>{item.englishName} · {item.code}</small>{livePrices[item.code] && <em>监测于 {new Date(livePrices[item.code].checkedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</em>}</div></div></td>
-                        {Object.keys(PROVIDERS).map((provider) => <td key={provider}><PriceMonitorCell country={item.code} provider={provider} plans={getRegionPlanPrices(item.code, provider)} supported={availabilityFor(provider, item.code).kind !== "unlisted"} scanning={scanning} onHistory={openHistory} /></td>)}
+                        <td><PriceMonitorCell country={item.code} provider={activeProvider} plans={getRegionPlanPrices(item.code, activeProvider)} supported={availabilityFor(activeProvider, item.code).kind !== "unlisted"} scanning={scanning} onHistory={openHistory} /></td>
                         <td>{lowest ? <div className="lowest-cell"><strong>{usd(lowest.plan.usd)}</strong><span><ProviderMark id={lowest.provider} size="tiny" />{PROVIDERS[lowest.provider].name} {lowest.plan.name}</span><small>{lowest.plan.display}</small></div> : <span className="monitor-loading queued"><RefreshCw className={scanning ? "spin" : ""} size={13} />{scanning ? "自动采集中" : "暂无付费价格"}</span>}</td>
                       </tr>
                     );
@@ -903,7 +929,7 @@ export default function App() {
             <button className="generate-button" onClick={generateAlias}><RefreshCw size={16} />换一个测试别名</button>
             <div className="rule-box"><ShieldCheck size={18} /><span>不自动创建账号，不绕过地区、身份、支付或服务条款限制。</span></div>
             <div className="official-links">
-              {Object.entries(PROVIDERS).map(([id, provider]) => <a key={id} href={provider.signup} target="_blank" rel="noreferrer"><ProviderMark id={id} size="tiny" />{provider.name} 官方入口<ExternalLink size={14} /></a>)}
+              <a href={PROVIDERS[activeProvider].signup} target="_blank" rel="noreferrer"><ProviderMark id={activeProvider} size="tiny" />{PROVIDERS[activeProvider].name} 官方入口<ExternalLink size={14} /></a>
             </div>
           </div>
         </div>

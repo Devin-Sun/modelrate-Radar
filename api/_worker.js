@@ -1,4 +1,4 @@
-const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-CBTqdluc.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-o3a8_L0r.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>ModelRate Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-BwuH-pG0.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-D9mx-q-x.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
@@ -502,7 +502,7 @@ export default {
       if (!/^[A-Z]{2}$/.test(country)) return json({ error: "invalid_country" }, 400);
       return json(await monitorCountry(country));
     }
-    if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
+    if (request.method === "GET" && ["/", "/index.html", "/openai", "/openai/", "/claude", "/claude/"].includes(url.pathname)) {
       return new Response(html, {
         headers: {
           "content-type": "text/html; charset=utf-8",

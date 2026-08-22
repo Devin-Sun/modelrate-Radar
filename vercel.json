@@ -3,6 +3,12 @@
   "framework": "vite",
   "outputDirectory": "dist/client",
   "regions": ["sin1"],
+  "rewrites": [
+    { "source": "/openai", "destination": "/index.html" },
+    { "source": "/openai/", "destination": "/index.html" },
+    { "source": "/claude", "destination": "/index.html" },
+    { "source": "/claude/", "destination": "/index.html" }
+  ],
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30
