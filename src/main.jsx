@@ -181,7 +181,6 @@ function SideNav({ open, onClose, onAlerts, scanProgress, activeProvider, onProv
               <ProviderMark id={provider} size="tiny" />{page.navLabel}
             </button>
           ))}
-          <a className="nav-item" href="#catalog" onClick={onClose}><Globe2 size={18} />当前厂商地区目录</a>
           <button className="nav-item nav-button" onClick={() => { onAlerts(); onClose(); }}><Bell size={18} />降价提醒<span className="ready">本地</span></button>
           <a className="nav-item" href="#tools"><Sparkles size={18} />合规工具</a>
         </nav>
@@ -284,6 +283,11 @@ export default function App() {
   const scanInProgressRef = useRef(false);
   const activePage = PROVIDER_PAGES[activeProvider];
   const activePlanSorts = CATALOG_PLAN_SORTS.filter((option) => option.provider === activeProvider);
+  const activeRegionCodes = ISO_REGION_CODES.filter((code) => availabilityFor(activeProvider, code).kind !== "unlisted");
+  const monitoredActiveRegionCount = activeRegionCodes.filter((code) => livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live")).length;
+  const alertRegionCodes = ISO_REGION_CODES.filter((code) => alertForm.provider
+    ? availabilityFor(alertForm.provider, code).kind !== "unlisted"
+    : Object.keys(PROVIDERS).some((provider) => availabilityFor(provider, code).kind !== "unlisted"));
 
   const changeProviderPage = (provider) => {
     if (!PROVIDER_PAGES[provider]) return;
@@ -576,8 +580,7 @@ export default function App() {
       .sort((a, b) => a.plan.usd - b.plan.usd)[0]
     : null;
 
-  const browserGlobalCheapest = ISO_REGION_CODES
-    .filter((code) => availabilityFor(activeProvider, code).kind !== "unlisted")
+  const browserGlobalCheapest = activeRegionCodes
     .flatMap((code) => getRegionPlanPrices(code, activeProvider).map((plan) => ({ code, provider: activeProvider, plan })))
     .filter((item) => item.plan?.status === "live" && Number.isFinite(item.plan?.usd) && item.plan.usd > 0)
     .sort((a, b) => a.plan.usd - b.plan.usd)[0];
@@ -726,7 +729,7 @@ export default function App() {
 
   const catalogRows = useMemo(() => {
     const planSort = activePlanSorts.find((option) => option.value === catalogSort);
-    return ISO_REGION_CODES.map((code) => {
+    return activeRegionCodes.map((code) => {
       const liveChecked = livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live");
       const lowest = lowestRegionPrice(code);
       const selectedPlan = planSort
@@ -750,8 +753,7 @@ export default function App() {
         ? item.code.toLowerCase() === needle
         : `${item.code} ${item.name} ${item.englishName}`.toLowerCase().includes(needle));
       const matchesFilter = catalogFilter === "ALL"
-        || (catalogFilter === "PRICED" && item.priced)
-        || (catalogFilter === "SUPPORTED" && OFFICIAL_SUPPORT[activeProvider].has(item.code));
+        || (catalogFilter === "PRICED" && item.priced);
       return matchesQuery && matchesFilter;
     }).sort((a, b) => {
       if (catalogSort === "priceAsc") return a.lowestUsd - b.lowestUsd || a.name.localeCompare(b.name, "zh-CN");
@@ -819,8 +821,8 @@ export default function App() {
                 <ProviderMark id={activeProvider} size="small" />
               </div>
             </StatCard>
-            <StatCard label="国家与地区目录" value="249" note={`${Object.keys(livePrices).length} 个地区已有本地缓存`} icon={Globe2} accent="#7aa7ff">
-              <div className="flag-row">🌍 <span>完整收录</span></div>
+            <StatCard label="可用国家与地区" value={activeRegionCodes.length} note={`${monitoredActiveRegionCount} 个地区已有 ${activePage.product} 价格`} icon={Globe2} accent="#7aa7ff">
+              <div className="flag-row">🌍 <span>仅显示官方支持地区</span></div>
             </StatCard>
             <StatCard
               label="当前最低可比价"
@@ -838,7 +840,7 @@ export default function App() {
 
           <section className="panel coverage-panel">
             <div className="panel-heading">
-              <div><h2>{activePage.product} 月付 / 年付最低价</h2><p>比较官网公开价与当前已监测的 {Object.keys(livePrices).length} 个国家和地区的 iOS 当地价；年付按总价和折合月价同时展示。</p></div>
+              <div><h2>{activePage.product} 月付 / 年付最低价</h2><p>比较官网公开价与当前已监测的 {monitoredActiveRegionCount} / {activeRegionCodes.length} 个支持地区的 iOS 当地价；年付按总价和折合月价同时展示。</p></div>
               <span className="coverage-verified"><ShieldCheck size={14} />实时汇率折算</span>
             </div>
             <div className="coverage-grid single-provider">
@@ -876,7 +878,7 @@ export default function App() {
             </div>
             <div className="catalog-toolbar">
               <label className="catalog-search"><Search size={16} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索中文名、英文名或代码…" />{catalogQuery && <button onClick={() => setCatalogQuery("")} aria-label="清除搜索"><X size={15} /></button>}</label>
-              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 249 项</option><option value="SUPPORTED">{activePage.product} 可用地区</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 {activeRegionCodes.length} 项</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
               <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">最低付费套餐：从低到高</option>{activePlanSorts.map((option) => <option key={option.value} value={option.value}>{option.label}：从低到高</option>)}</select><ChevronDown size={14} /></label>
             </div>
             <div className="table-scroll catalog-scroll">
@@ -900,7 +902,7 @@ export default function App() {
             </div>
             <footer className="catalog-footer">
               <span><Info size={14} />年付只展示官方明确提供的价格；“仅月付”表示该套餐当前无年付选项，“登录官网查看”表示公开页面未提供当地金额。</span>
-              {!catalogExpanded && !catalogQuery && catalogFilter === "ALL" ? <button onClick={() => setCatalogExpanded(true)}>显示全部 249 项 <ChevronDown size={14} /></button> : <span>当前显示 {visibleCatalogRows.length} 项</span>}
+              {!catalogExpanded && !catalogQuery && catalogFilter === "ALL" ? <button onClick={() => setCatalogExpanded(true)}>显示全部 {activeRegionCodes.length} 项 <ChevronDown size={14} /></button> : <span>当前显示 {visibleCatalogRows.length} 项</span>}
             </footer>
           </section>
 
@@ -944,9 +946,9 @@ export default function App() {
             <p>{backendStatus.ready ? "价格下降达到你设置的幅度时发送邮件。首次订阅需要点击邮件确认。" : "提醒规则保存在当前浏览器。网页打开并完成扫描后，如发现降价会发送浏览器通知。"}</p>
             <div className="form-grid">
               {backendStatus.ready && <label className="wide">邮箱<input required type="email" value={alertForm.email} onChange={(event) => setAlertForm({ ...alertForm, email: event.target.value })} placeholder="name@example.com" /></label>}
-              <label>厂商<select value={alertForm.provider} onChange={(event) => setAlertForm({ ...alertForm, provider: event.target.value, planId: "" })}><option value="">全部厂商</option>{Object.entries(PROVIDERS).map(([id, provider]) => <option key={id} value={id}>{provider.name}</option>)}</select></label>
+              <label>厂商<select value={alertForm.provider} onChange={(event) => { const provider = event.target.value; setAlertForm({ ...alertForm, provider, planId: "", country: !provider || !alertForm.country || availabilityFor(provider, alertForm.country).kind !== "unlisted" ? alertForm.country : "" }); }}><option value="">全部厂商</option>{Object.entries(PROVIDERS).map(([id, provider]) => <option key={id} value={id}>{provider.name}</option>)}</select></label>
               <label>套餐<select value={alertForm.planId} onChange={(event) => setAlertForm({ ...alertForm, planId: event.target.value })}><option value="">全部套餐</option>{(alertForm.provider ? SUBSCRIPTION_PLANS[alertForm.provider] : Object.values(SUBSCRIPTION_PLANS).flat()).filter((plan, index, list) => list.findIndex((item) => item.id === plan.id && item.name === plan.name) === index).map((plan) => <option key={`${plan.id}-${plan.name}`} value={plan.id}>{plan.name}</option>)}</select></label>
-              <label>地区<select value={alertForm.country} onChange={(event) => setAlertForm({ ...alertForm, country: event.target.value })}><option value="">全球任意地区</option>{ISO_REGION_CODES.map((code) => <option key={code} value={code}>{flagFromCode(code)} {zhRegionNames.of(code)} · {code}</option>)}</select></label>
+              <label>地区<select value={alertForm.country} onChange={(event) => setAlertForm({ ...alertForm, country: event.target.value })}><option value="">全球任意可用地区</option>{alertRegionCodes.map((code) => <option key={code} value={code}>{flagFromCode(code)} {zhRegionNames.of(code)} · {code}</option>)}</select></label>
               <label>最低降幅<input type="number" min="0" max="100" step="0.1" value={alertForm.thresholdPercent} onChange={(event) => setAlertForm({ ...alertForm, thresholdPercent: event.target.value })} /><span className="input-suffix">%</span></label>
             </div>
             <button className="generate-button" disabled={alertSending}>{alertSending ? <RefreshCw className="spin" size={16} /> : <Bell size={16} />}{alertSending ? "正在保存…" : backendStatus.ready ? "发送确认邮件" : "保存本地提醒"}</button>
