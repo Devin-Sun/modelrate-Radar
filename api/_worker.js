@@ -1,4 +1,4 @@
-const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>AI Price Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-D6rB9PEM.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-BxkikDiR.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>AI Price Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-T3iLLXK4.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-CIBw5KlC.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
@@ -121,7 +121,7 @@ async function fetchStorePrice(provider, country) {
       status: "live",
       currency,
       plans,
-      channel: "iOS App Store",
+      channel: "Apple App Store",
       source
     };
   } catch (error) {

@@ -127,7 +127,7 @@ async function fetchStorePrice(provider, country) {
       status: "live",
       currency,
       plans,
-      channel: "iOS App Store",
+      channel: "Apple App Store",
       source
     };
   } catch (error) {

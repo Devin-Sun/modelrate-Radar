@@ -164,6 +164,8 @@ main { min-height: 100vh; margin-left: 236px; }
 }
 .catalog-table td:last-child { z-index: 2; background: #0b1921; }
 .catalog-table tbody tr:hover td:last-child { background: #10232a; }
+.catalog-table tbody tr.deal-region td:first-child { box-shadow: inset 3px 0 rgba(44,224,176,.55); }
+.catalog-table tbody tr.global-lowest-region td:first-child { background: linear-gradient(90deg, rgba(240,210,125,.075), transparent 75%); }
 .catalog-table thead th { height: 54px; padding-top: 10px; padding-bottom: 10px; border-bottom: 1px solid rgba(139,167,172,.14); color: #9db0b4; background: #0d1d26; text-transform: none; }
 .catalog-table thead th:nth-child(2) { box-shadow: inset 0 2px rgba(39,224,173,.5); }
 .catalog-table thead th:nth-child(3) { box-shadow: inset 0 2px rgba(233,144,98,.55); }
@@ -180,6 +182,12 @@ main { min-height: 100vh; margin-left: 236px; }
 .provider-column-head.anthropic strong { color: #f0b491; }
 .catalog-table td { height: 152px; vertical-align: top; }
 .catalog-table .region-cell em { margin-top: 4px; display: block; color: #3d8477; font-size: 7px; font-style: normal; }
+.region-deal-badges { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 3px; }
+.region-deal-badges span { padding: 2px 4px; border-radius: 4px; font-size: 6px; font-weight: 700; white-space: nowrap; }
+.region-deal-badges .best { color: #f3d77f; border: 1px solid rgba(240,210,125,.18); background: rgba(240,210,125,.09); }
+.region-deal-badges .best.annual { color: #e8bbff; border-color: rgba(200,139,237,.2); background: rgba(200,139,237,.09); }
+.region-deal-badges .discount { color: #79ddbf; border: 1px solid rgba(44,224,176,.16); background: rgba(44,224,176,.075); }
+.region-deal-badges .discount.annual { color: #91c5ff; border-color: rgba(122,167,255,.18); background: rgba(122,167,255,.075); }
 .availability { width: fit-content; padding: 4px 6px; display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(139,167,172,.1); border-radius: 12px; color: #71858b; font-size: 7px; white-space: nowrap; }
 .availability i { width: 5px; height: 5px; border-radius: 50%; background: #53656a; }
 .availability.supported { color: #75cdb4; border-color: rgba(44,224,176,.14); background: rgba(44,224,176,.035); }
@@ -379,6 +387,8 @@ tbody tr:hover { background: rgba(44,224,176,.025); }
 .catalog-table td { height: 370px; padding-top: 14px; padding-bottom: 14px; }
 .catalog-table.plan-focused td { height: 142px; }
 .catalog-table .region-cell em { font-size: 10px; }
+.region-deal-badges { margin-top: 7px; gap: 4px; }
+.region-deal-badges span { padding: 3px 5px; font-size: 8px; }
 .service-cell strong, .region-cell strong { font-size: 12px; }
 .provider-card-head small, .service-cell small, .region-cell small { font-size: 10px; }
 .region-cell > span { font-size: 21px; }
