@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { ISO_REGION_CODES, SUBSCRIPTION_PLANS } from "../src/data.js";
+import { ANTHROPIC_US_PRICING_SOURCE, ISO_REGION_CODES, OPENAI_US_PRICING_SOURCE, SUBSCRIPTION_PLANS } from "../src/data.js";
 
 const clientDir = "dist/client";
 const html = await readFile(`${clientDir}/index.html`, "utf8");
@@ -13,6 +13,12 @@ const APP_STORE_PRODUCTS = {
 
 const SUBSCRIPTION_PLANS = ${JSON.stringify(SUBSCRIPTION_PLANS)};
 const REGION_CODES = ${JSON.stringify(ISO_REGION_CODES)};
+const ANTHROPIC_US_PRICING_SOURCE = ${JSON.stringify(ANTHROPIC_US_PRICING_SOURCE)};
+const OPENAI_US_PRICING_SOURCE = ${JSON.stringify(OPENAI_US_PRICING_SOURCE)};
+const OFFICIAL_US_PRICING_SOURCES = {
+  openai: OPENAI_US_PRICING_SOURCE,
+  anthropic: ANTHROPIC_US_PRICING_SOURCE
+};
 
 const priceCache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
@@ -67,7 +73,60 @@ const isPlausibleAnnualPrice = (monthlyAmount, annualAmount) => {
   return billedMonths >= 6 && billedMonths <= 14;
 };
 
+function officialUsProviderResult(provider) {
+  const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
+    if (Number.isFinite(plan.usReferenceAmount)) {
+      const annual = Number.isFinite(plan.usAnnualReferenceAmount) ? {
+        status: "live",
+        display: plan.usAnnualReferenceDisplay,
+        amount: plan.usAnnualReferenceAmount,
+        currency: "USD",
+        monthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+        savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+      } : { status: "none", display: "仅月付" };
+      return {
+        ...plan,
+        status: "live",
+        display: plan.usReferenceDisplay,
+        amount: plan.usReferenceAmount,
+        currency: "USD",
+        annual
+      };
+    }
+    if (plan.kind === "reference") {
+      const savingPercent = plan.annualReferenceAmount
+        ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)
+        : null;
+      return {
+        ...plan,
+        status: "reference",
+        display: plan.referenceDisplay,
+        amount: plan.referenceAmount,
+        currency: "USD",
+        annual: plan.annualReferenceAmount ? {
+          status: "reference",
+          display: plan.annualReferenceDisplay,
+          amount: plan.annualReferenceAmount,
+          currency: "USD",
+          monthlyEquivalent: plan.annualReferenceAmount / 12,
+          savingPercent
+        } : { status: "none", display: "仅月付" }
+      };
+    }
+    return { ...plan, status: "not_listed", display: "官网暂无价格", amount: null, currency: "USD", annual: { status: "none", display: "仅月付" } };
+  });
+  return {
+    provider,
+    status: "live",
+    currency: "USD",
+    plans,
+    channel: provider === "openai" ? "OpenAI 官方定价" : "Anthropic 官方定价",
+    source: OFFICIAL_US_PRICING_SOURCES[provider]
+  };
+}
+
 async function fetchStorePrice(provider, country) {
+  if (country === "US" && OFFICIAL_US_PRICING_SOURCES[provider]) return officialUsProviderResult(provider);
   const config = APP_STORE_PRODUCTS[provider];
   const source = "https://apps.apple.com/" + country.toLowerCase() + "/app/" + config.slug + "/id" + config.id;
   try {
@@ -158,7 +217,7 @@ async function monitorSystem() {
   } catch {}
   const value = {
     checkedAt: new Date().toISOString(),
-    collector: "Apple App Store country storefronts",
+    collector: "Official US web pricing + Apple App Store country storefronts",
     intervalMinutes: 1440,
     rates,
     fxUpdatedAt
@@ -246,6 +305,29 @@ function normalizePriceRows(results, rates) {
   return normalized;
 }
 
+function canonicalizeOfficialPrices(rows) {
+  return rows.flatMap((row) => {
+    if (row.country !== "US" || !OFFICIAL_US_PRICING_SOURCES[row.provider]) return [row];
+    const plan = SUBSCRIPTION_PLANS[row.provider].find((item) => item.id === row.plan_id);
+    const amount = row.billing_period === "monthly"
+      ? plan?.usReferenceAmount
+      : plan?.usAnnualReferenceAmount;
+    const display = row.billing_period === "monthly"
+      ? plan?.usReferenceDisplay
+      : plan?.usAnnualReferenceDisplay;
+    if (!Number.isFinite(amount)) return row.billing_period === "annual" && Number.isFinite(plan?.usReferenceAmount) ? [] : [row];
+    return [{
+      ...row,
+      amount,
+      currency: "USD",
+      display,
+      usd_amount: amount,
+      usd_monthly_equivalent: row.billing_period === "annual" ? amount / 12 : amount,
+      source: OFFICIAL_US_PRICING_SOURCES[row.provider]
+    }];
+  });
+}
+
 function latestRowsToResults(rows) {
   const countries = new Map();
   for (const row of rows) {
@@ -260,9 +342,27 @@ function latestRowsToResults(rows) {
     const countryRows = [...providers.values()].flat();
     const checkedAt = countryRows.reduce((newest, row) => !newest || row.observed_at > newest ? row.observed_at : newest, null);
     const prices = [...providers.entries()].map(([provider, providerRows]) => {
-      const source = providerRows.find((row) => row.source)?.source
+      const isOfficialUs = country === "US" && Boolean(OFFICIAL_US_PRICING_SOURCES[provider]);
+      const source = isOfficialUs ? OFFICIAL_US_PRICING_SOURCES[provider] : providerRows.find((row) => row.source)?.source
         || "https://apps.apple.com/" + country.toLowerCase() + "/app/" + APP_STORE_PRODUCTS[provider].slug + "/id" + APP_STORE_PRODUCTS[provider].id;
       const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
+        if (isOfficialUs && Number.isFinite(plan.usReferenceAmount)) {
+          return {
+            ...plan,
+            status: "live",
+            display: plan.usReferenceDisplay,
+            amount: plan.usReferenceAmount,
+            currency: "USD",
+            annual: Number.isFinite(plan.usAnnualReferenceAmount) ? {
+              status: "live",
+              display: plan.usAnnualReferenceDisplay,
+              amount: plan.usAnnualReferenceAmount,
+              currency: "USD",
+              monthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+              savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+            } : { status: "none", display: "仅月付" }
+          };
+        }
         if (plan.kind === "reference") {
           const savingPercent = plan.annualReferenceAmount
             ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)
@@ -422,14 +522,15 @@ async function getGlobalSummary(env) {
     fetchAllLatestPrices(env),
     supabaseRequest(env, "/rest/v1/scan_state?id=eq.1&select=*")
   ]);
+  const effectiveRows = canonicalizeOfficialPrices(rows);
   const minima = new Map();
   const monitored = new Set();
-  const monthlyRows = new Map(rows.filter((row) => row.billing_period === "monthly").map((row) => [
+  const monthlyRows = new Map(effectiveRows.filter((row) => row.billing_period === "monthly").map((row) => [
     row.country + ":" + row.provider + ":" + row.plan_id,
     row
   ]));
   let newest = null;
-  for (const row of rows) {
+  for (const row of effectiveRows) {
     monitored.add(row.country);
     if (!newest || row.observed_at > newest) newest = row.observed_at;
     if (row.billing_period === "annual") {
@@ -446,7 +547,7 @@ async function getGlobalSummary(env) {
     monitoredCountries: monitored.size,
     latestPriceRows: rows.length,
     newestObservationAt: newest,
-    results: latestRowsToResults(rows),
+    results: latestRowsToResults(effectiveRows),
     minima: [...minima.values()].sort((a, b) => Number(a.usd_monthly_equivalent) - Number(b.usd_monthly_equivalent))
   };
 }

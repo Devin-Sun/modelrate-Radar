@@ -17,6 +17,9 @@ export const PROVIDERS = {
   }
 };
 
+export const ANTHROPIC_US_PRICING_SOURCE = "https://support.claude.com/en/articles/11049762-choose-a-claude-plan";
+export const OPENAI_US_PRICING_SOURCE = "https://chatgpt.com/pricing";
+
 export const COVERAGE_SUMMARY = {
   openai: {
     label: "官方支持清单",
@@ -34,15 +37,15 @@ export const COVERAGE_SUMMARY = {
 
 export const SUBSCRIPTION_PLANS = {
   openai: [
-    { id: "go", name: "Go", billing: "个人套餐", storeProduct: "ChatGPT Go", annualKind: "none" },
-    { id: "plus", name: "Plus", billing: "个人套餐", storeProduct: "ChatGPT Plus", annualStoreProduct: "ChatGPT Plus", annualStoreProductOccurrence: 1 },
-    { id: "pro5", name: "Pro 5x", billing: "个人套餐", storeProduct: "ChatGPT Pro 5x", annualKind: "none" },
-    { id: "pro20", name: "Pro 20x", billing: "个人套餐", storeProduct: "ChatGPT Pro 20x", annualKind: "none" }
+    { id: "go", name: "Go", billing: "个人套餐", storeProduct: "ChatGPT Go", annualKind: "none", usReferenceAmount: 8, usReferenceDisplay: "US$8 / 月 · 官网" },
+    { id: "plus", name: "Plus", billing: "个人套餐", storeProduct: "ChatGPT Plus", annualStoreProduct: "ChatGPT Plus", annualStoreProductOccurrence: 1, usReferenceAmount: 20, usReferenceDisplay: "US$20 / 月 · 官网" },
+    { id: "pro5", name: "Pro 5x", billing: "个人套餐", storeProduct: "ChatGPT Pro 5x", annualKind: "none", usReferenceAmount: 100, usReferenceDisplay: "US$100 / 月 · 官网" },
+    { id: "pro20", name: "Pro 20x", billing: "个人套餐", storeProduct: "ChatGPT Pro 20x", annualKind: "none", usReferenceAmount: 200, usReferenceDisplay: "US$200 / 月 · 官网" }
   ],
   anthropic: [
-    { id: "pro", name: "Pro", billing: "个人套餐", storeProduct: "Claude Pro - Monthly", annualStoreProduct: "Claude Pro - Annual" },
-    { id: "max5", name: "Max 5x", billing: "个人套餐", storeProduct: "Claude Max 5x - Monthly", annualKind: "none", minimumReferenceAmount: 100, minimumReferenceDisplay: "US$100 / 月 · 官网" },
-    { id: "max20", name: "Max 20x", billing: "个人套餐", storeProduct: "Claude Max 20x - Monthly", annualKind: "none", minimumReferenceAmount: 200, minimumReferenceDisplay: "US$200 / 月 · 官网" },
+    { id: "pro", name: "Pro", billing: "个人套餐", storeProduct: "Claude Pro - Monthly", annualStoreProduct: "Claude Pro - Annual", usReferenceAmount: 20, usReferenceDisplay: "US$20 / 月 · 官网", usAnnualReferenceAmount: 200, usAnnualReferenceDisplay: "US$200 / 年 · 官网" },
+    { id: "max5", name: "Max 5x", billing: "个人套餐", storeProduct: "Claude Max 5x - Monthly", annualKind: "none", usReferenceAmount: 100, usReferenceDisplay: "US$100 / 月 · 官网" },
+    { id: "max20", name: "Max 20x", billing: "个人套餐", storeProduct: "Claude Max 20x - Monthly", annualKind: "none", usReferenceAmount: 200, usReferenceDisplay: "US$200 / 月 · 官网" },
     { id: "team", name: "Team", billing: "每席位 · 至少 5 席", kind: "reference", referenceAmount: 30, referenceDisplay: "US$30 / 月", annualReferenceAmount: 300, annualReferenceDisplay: "US$300 / 年" }
   ]
 };

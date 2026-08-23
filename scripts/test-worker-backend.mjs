@@ -7,6 +7,9 @@ const recorded = { priceRows: [], emails: [] };
 const latestRows = [
   { country: "US", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 20, currency: "USD", display: "$20", usd_amount: 20, usd_monthly_equivalent: 20, source: "official", observed_at: "2026-08-04T00:00:00Z" },
   { country: "US", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "annual", amount: 200, currency: "USD", display: "$200", usd_amount: 200, usd_monthly_equivalent: 16.67, source: "official", observed_at: "2026-08-04T00:00:00Z" },
+  { country: "US", provider: "anthropic", plan_id: "pro", plan_name: "Pro", billing_period: "monthly", amount: 24.99, currency: "USD", display: "$24.99", usd_amount: 24.99, usd_monthly_equivalent: 24.99, source: "app-store", observed_at: "2026-08-04T00:00:00Z" },
+  { country: "US", provider: "anthropic", plan_id: "pro", plan_name: "Pro", billing_period: "annual", amount: 249.99, currency: "USD", display: "$249.99", usd_amount: 249.99, usd_monthly_equivalent: 20.83, source: "app-store", observed_at: "2026-08-04T00:00:00Z" },
+  { country: "US", provider: "anthropic", plan_id: "max5", plan_name: "Max 5x", billing_period: "monthly", amount: 124.99, currency: "USD", display: "$124.99", usd_amount: 124.99, usd_monthly_equivalent: 124.99, source: "app-store", observed_at: "2026-08-04T00:00:00Z" },
   { country: "IN", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 1499, currency: "INR", display: "₹1,499", usd_amount: 17.1, usd_monthly_equivalent: 17.1, source: "official", observed_at: "2026-08-04T01:00:00Z" },
   { country: "ST", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "monthly", amount: 19.99, currency: "USD", display: "$19.99", usd_amount: 19.99, usd_monthly_equivalent: 19.99, source: "official", observed_at: "2026-08-04T02:00:00Z" },
   { country: "ST", provider: "openai", plan_id: "plus", plan_name: "Plus", billing_period: "annual", amount: 19.99, currency: "USD", display: "$19.99", usd_amount: 19.99, usd_monthly_equivalent: 1.67, source: "official", observed_at: "2026-08-04T02:00:00Z" }
@@ -88,7 +91,22 @@ try {
   const databaseUsPlus = summary.results.find((result) => result.country === "US").prices
     .find((price) => price.provider === "openai").plans.find((plan) => plan.id === "plus");
   assert.equal(databaseUsPlus.amount, 20);
-  assert.equal(databaseUsPlus.annual.amount, 200);
+  assert.equal(databaseUsPlus.annual.status, "none");
+  const databaseUsOpenAi = summary.results.find((result) => result.country === "US").prices
+    .find((price) => price.provider === "openai");
+  assert.equal(databaseUsOpenAi.source, "https://chatgpt.com/pricing");
+  assert.equal(databaseUsOpenAi.plans.find((plan) => plan.id === "go").amount, 8);
+  assert.equal(databaseUsOpenAi.plans.find((plan) => plan.id === "plus").amount, 20);
+  assert.equal(databaseUsOpenAi.plans.find((plan) => plan.id === "pro5").amount, 100);
+  assert.equal(databaseUsOpenAi.plans.find((plan) => plan.id === "pro20").amount, 200);
+  assert.equal(summary.minima.some((row) => row.provider === "openai" && row.billing_period === "annual"), false);
+  const databaseUsClaude = summary.results.find((result) => result.country === "US").prices
+    .find((price) => price.provider === "anthropic");
+  assert.equal(databaseUsClaude.source, "https://support.claude.com/en/articles/11049762-choose-a-claude-plan");
+  assert.equal(databaseUsClaude.plans.find((plan) => plan.id === "pro").amount, 20);
+  assert.equal(databaseUsClaude.plans.find((plan) => plan.id === "pro").annual.amount, 200);
+  assert.equal(databaseUsClaude.plans.find((plan) => plan.id === "max5").amount, 100);
+  assert.equal(databaseUsClaude.plans.find((plan) => plan.id === "max20").amount, 200);
 
   const statusResponse = await worker.fetch(new Request("https://site.test/api/backend/status"), env);
   assert.equal(statusResponse.status, 200);
@@ -143,7 +161,12 @@ try {
   assert.equal(scanResponse.status, 200);
   const scan = await scanResponse.json();
   assert.deepEqual(scan.countries, ["US"]);
-  assert.ok(recorded.priceRows.some((row) => row.provider === "anthropic" && row.billing_period === "annual"));
+  assert.ok(recorded.priceRows.some((row) => row.country === "US" && row.provider === "anthropic" && row.plan_id === "pro" && row.billing_period === "annual" && row.amount === 200));
+  assert.ok(recorded.priceRows.some((row) => row.country === "US" && row.provider === "anthropic" && row.plan_id === "max5" && row.billing_period === "monthly" && row.amount === 100));
+  assert.ok(recorded.priceRows.some((row) => row.country === "US" && row.provider === "anthropic" && row.plan_id === "max20" && row.billing_period === "monthly" && row.amount === 200));
+  assert.ok(recorded.priceRows.some((row) => row.country === "US" && row.provider === "openai" && row.plan_id === "go" && row.billing_period === "monthly" && row.amount === 8));
+  assert.ok(recorded.priceRows.some((row) => row.country === "US" && row.provider === "openai" && row.plan_id === "pro5" && row.billing_period === "monthly" && row.amount === 100));
+  assert.equal(recorded.priceRows.some((row) => row.country === "US" && row.provider === "openai" && row.billing_period === "annual"), false);
 
   const confirmResponse = await worker.fetch(new Request("https://site.test/api/alerts/confirm?token=00000000-0000-4000-8000-000000000001"), env);
   assert.equal(confirmResponse.status, 200);

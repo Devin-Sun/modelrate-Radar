@@ -1,12 +1,18 @@
-const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>AI Price Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-T3iLLXK4.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-CIBw5KlC.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
+const html = "<!doctype html>\n<html lang=\"zh-CN\">\n  <head>\n    <meta charset=\"UTF-8\" />\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n    <meta name=\"theme-color\" content=\"#071018\" />\n    <meta name=\"description\" content=\"对比 OpenAI 与 Anthropic Claude 的全球订阅价格。\" />\n    <title>AI Price Radar — 全球 AI 订阅价格</title>\n    <script type=\"module\" crossorigin src=\"/assets/index-D57SjQIP.js\"></script>\n    <link rel=\"stylesheet\" crossorigin href=\"/assets/index-CIBw5KlC.css\">\n  </head>\n  <body>\n    <div id=\"root\"></div>\n  </body>\n</html>\n";
 
 const APP_STORE_PRODUCTS = {
   openai: { slug: "chatgpt", id: "6448311069" },
   anthropic: { slug: "claude-by-anthropic", id: "6473753684" }
 };
 
-const SUBSCRIPTION_PLANS = {"openai":[{"id":"go","name":"Go","billing":"个人套餐","storeProduct":"ChatGPT Go","annualKind":"none"},{"id":"plus","name":"Plus","billing":"个人套餐","storeProduct":"ChatGPT Plus","annualStoreProduct":"ChatGPT Plus","annualStoreProductOccurrence":1},{"id":"pro5","name":"Pro 5x","billing":"个人套餐","storeProduct":"ChatGPT Pro 5x","annualKind":"none"},{"id":"pro20","name":"Pro 20x","billing":"个人套餐","storeProduct":"ChatGPT Pro 20x","annualKind":"none"}],"anthropic":[{"id":"pro","name":"Pro","billing":"个人套餐","storeProduct":"Claude Pro - Monthly","annualStoreProduct":"Claude Pro - Annual"},{"id":"max5","name":"Max 5x","billing":"个人套餐","storeProduct":"Claude Max 5x - Monthly","annualKind":"none","minimumReferenceAmount":100,"minimumReferenceDisplay":"US$100 / 月 · 官网"},{"id":"max20","name":"Max 20x","billing":"个人套餐","storeProduct":"Claude Max 20x - Monthly","annualKind":"none","minimumReferenceAmount":200,"minimumReferenceDisplay":"US$200 / 月 · 官网"},{"id":"team","name":"Team","billing":"每席位 · 至少 5 席","kind":"reference","referenceAmount":30,"referenceDisplay":"US$30 / 月","annualReferenceAmount":300,"annualReferenceDisplay":"US$300 / 年"}]};
+const SUBSCRIPTION_PLANS = {"openai":[{"id":"go","name":"Go","billing":"个人套餐","storeProduct":"ChatGPT Go","annualKind":"none","usReferenceAmount":8,"usReferenceDisplay":"US$8 / 月 · 官网"},{"id":"plus","name":"Plus","billing":"个人套餐","storeProduct":"ChatGPT Plus","annualStoreProduct":"ChatGPT Plus","annualStoreProductOccurrence":1,"usReferenceAmount":20,"usReferenceDisplay":"US$20 / 月 · 官网"},{"id":"pro5","name":"Pro 5x","billing":"个人套餐","storeProduct":"ChatGPT Pro 5x","annualKind":"none","usReferenceAmount":100,"usReferenceDisplay":"US$100 / 月 · 官网"},{"id":"pro20","name":"Pro 20x","billing":"个人套餐","storeProduct":"ChatGPT Pro 20x","annualKind":"none","usReferenceAmount":200,"usReferenceDisplay":"US$200 / 月 · 官网"}],"anthropic":[{"id":"pro","name":"Pro","billing":"个人套餐","storeProduct":"Claude Pro - Monthly","annualStoreProduct":"Claude Pro - Annual","usReferenceAmount":20,"usReferenceDisplay":"US$20 / 月 · 官网","usAnnualReferenceAmount":200,"usAnnualReferenceDisplay":"US$200 / 年 · 官网"},{"id":"max5","name":"Max 5x","billing":"个人套餐","storeProduct":"Claude Max 5x - Monthly","annualKind":"none","usReferenceAmount":100,"usReferenceDisplay":"US$100 / 月 · 官网"},{"id":"max20","name":"Max 20x","billing":"个人套餐","storeProduct":"Claude Max 20x - Monthly","annualKind":"none","usReferenceAmount":200,"usReferenceDisplay":"US$200 / 月 · 官网"},{"id":"team","name":"Team","billing":"每席位 · 至少 5 席","kind":"reference","referenceAmount":30,"referenceDisplay":"US$30 / 月","annualReferenceAmount":300,"annualReferenceDisplay":"US$300 / 年"}]};
 const REGION_CODES = ["AD","AE","AF","AG","AI","AL","AM","AO","AQ","AR","AS","AT","AU","AW","AX","AZ","BA","BB","BD","BE","BF","BG","BH","BI","BJ","BL","BM","BN","BO","BQ","BR","BS","BT","BV","BW","BY","BZ","CA","CC","CD","CF","CG","CH","CI","CK","CL","CM","CN","CO","CR","CU","CV","CW","CX","CY","CZ","DE","DJ","DK","DM","DO","DZ","EC","EE","EG","EH","ER","ES","ET","FI","FJ","FK","FM","FO","FR","GA","GB","GD","GE","GF","GG","GH","GI","GL","GM","GN","GP","GQ","GR","GS","GT","GU","GW","GY","HK","HM","HN","HR","HT","HU","ID","IE","IL","IM","IN","IO","IQ","IR","IS","IT","JE","JM","JO","JP","KE","KG","KH","KI","KM","KN","KP","KR","KW","KY","KZ","LA","LB","LC","LI","LK","LR","LS","LT","LU","LV","LY","MA","MC","MD","ME","MF","MG","MH","MK","ML","MM","MN","MO","MP","MQ","MR","MS","MT","MU","MV","MW","MX","MY","MZ","NA","NC","NE","NF","NG","NI","NL","NO","NP","NR","NU","NZ","OM","PA","PE","PF","PG","PH","PK","PL","PM","PN","PR","PS","PT","PW","PY","QA","RE","RO","RS","RU","RW","SA","SB","SC","SD","SE","SG","SH","SI","SJ","SK","SL","SM","SN","SO","SR","SS","ST","SV","SX","SY","SZ","TC","TD","TF","TG","TH","TJ","TK","TL","TM","TN","TO","TR","TT","TV","TW","TZ","UA","UG","UM","US","UY","UZ","VA","VC","VE","VG","VI","VN","VU","WF","WS","YE","YT","ZA","ZM","ZW"];
+const ANTHROPIC_US_PRICING_SOURCE = "https://support.claude.com/en/articles/11049762-choose-a-claude-plan";
+const OPENAI_US_PRICING_SOURCE = "https://chatgpt.com/pricing";
+const OFFICIAL_US_PRICING_SOURCES = {
+  openai: OPENAI_US_PRICING_SOURCE,
+  anthropic: ANTHROPIC_US_PRICING_SOURCE
+};
 
 const priceCache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
@@ -61,7 +67,60 @@ const isPlausibleAnnualPrice = (monthlyAmount, annualAmount) => {
   return billedMonths >= 6 && billedMonths <= 14;
 };
 
+function officialUsProviderResult(provider) {
+  const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
+    if (Number.isFinite(plan.usReferenceAmount)) {
+      const annual = Number.isFinite(plan.usAnnualReferenceAmount) ? {
+        status: "live",
+        display: plan.usAnnualReferenceDisplay,
+        amount: plan.usAnnualReferenceAmount,
+        currency: "USD",
+        monthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+        savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+      } : { status: "none", display: "仅月付" };
+      return {
+        ...plan,
+        status: "live",
+        display: plan.usReferenceDisplay,
+        amount: plan.usReferenceAmount,
+        currency: "USD",
+        annual
+      };
+    }
+    if (plan.kind === "reference") {
+      const savingPercent = plan.annualReferenceAmount
+        ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)
+        : null;
+      return {
+        ...plan,
+        status: "reference",
+        display: plan.referenceDisplay,
+        amount: plan.referenceAmount,
+        currency: "USD",
+        annual: plan.annualReferenceAmount ? {
+          status: "reference",
+          display: plan.annualReferenceDisplay,
+          amount: plan.annualReferenceAmount,
+          currency: "USD",
+          monthlyEquivalent: plan.annualReferenceAmount / 12,
+          savingPercent
+        } : { status: "none", display: "仅月付" }
+      };
+    }
+    return { ...plan, status: "not_listed", display: "官网暂无价格", amount: null, currency: "USD", annual: { status: "none", display: "仅月付" } };
+  });
+  return {
+    provider,
+    status: "live",
+    currency: "USD",
+    plans,
+    channel: provider === "openai" ? "OpenAI 官方定价" : "Anthropic 官方定价",
+    source: OFFICIAL_US_PRICING_SOURCES[provider]
+  };
+}
+
 async function fetchStorePrice(provider, country) {
+  if (country === "US" && OFFICIAL_US_PRICING_SOURCES[provider]) return officialUsProviderResult(provider);
   const config = APP_STORE_PRODUCTS[provider];
   const source = "https://apps.apple.com/" + country.toLowerCase() + "/app/" + config.slug + "/id" + config.id;
   try {
@@ -152,7 +211,7 @@ async function monitorSystem() {
   } catch {}
   const value = {
     checkedAt: new Date().toISOString(),
-    collector: "Apple App Store country storefronts",
+    collector: "Official US web pricing + Apple App Store country storefronts",
     intervalMinutes: 1440,
     rates,
     fxUpdatedAt
@@ -240,6 +299,29 @@ function normalizePriceRows(results, rates) {
   return normalized;
 }
 
+function canonicalizeOfficialPrices(rows) {
+  return rows.flatMap((row) => {
+    if (row.country !== "US" || !OFFICIAL_US_PRICING_SOURCES[row.provider]) return [row];
+    const plan = SUBSCRIPTION_PLANS[row.provider].find((item) => item.id === row.plan_id);
+    const amount = row.billing_period === "monthly"
+      ? plan?.usReferenceAmount
+      : plan?.usAnnualReferenceAmount;
+    const display = row.billing_period === "monthly"
+      ? plan?.usReferenceDisplay
+      : plan?.usAnnualReferenceDisplay;
+    if (!Number.isFinite(amount)) return row.billing_period === "annual" && Number.isFinite(plan?.usReferenceAmount) ? [] : [row];
+    return [{
+      ...row,
+      amount,
+      currency: "USD",
+      display,
+      usd_amount: amount,
+      usd_monthly_equivalent: row.billing_period === "annual" ? amount / 12 : amount,
+      source: OFFICIAL_US_PRICING_SOURCES[row.provider]
+    }];
+  });
+}
+
 function latestRowsToResults(rows) {
   const countries = new Map();
   for (const row of rows) {
@@ -254,9 +336,27 @@ function latestRowsToResults(rows) {
     const countryRows = [...providers.values()].flat();
     const checkedAt = countryRows.reduce((newest, row) => !newest || row.observed_at > newest ? row.observed_at : newest, null);
     const prices = [...providers.entries()].map(([provider, providerRows]) => {
-      const source = providerRows.find((row) => row.source)?.source
+      const isOfficialUs = country === "US" && Boolean(OFFICIAL_US_PRICING_SOURCES[provider]);
+      const source = isOfficialUs ? OFFICIAL_US_PRICING_SOURCES[provider] : providerRows.find((row) => row.source)?.source
         || "https://apps.apple.com/" + country.toLowerCase() + "/app/" + APP_STORE_PRODUCTS[provider].slug + "/id" + APP_STORE_PRODUCTS[provider].id;
       const plans = SUBSCRIPTION_PLANS[provider].map((plan) => {
+        if (isOfficialUs && Number.isFinite(plan.usReferenceAmount)) {
+          return {
+            ...plan,
+            status: "live",
+            display: plan.usReferenceDisplay,
+            amount: plan.usReferenceAmount,
+            currency: "USD",
+            annual: Number.isFinite(plan.usAnnualReferenceAmount) ? {
+              status: "live",
+              display: plan.usAnnualReferenceDisplay,
+              amount: plan.usAnnualReferenceAmount,
+              currency: "USD",
+              monthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+              savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+            } : { status: "none", display: "仅月付" }
+          };
+        }
         if (plan.kind === "reference") {
           const savingPercent = plan.annualReferenceAmount
             ? Math.round((1 - plan.annualReferenceAmount / 12 / plan.referenceAmount) * 100)
@@ -416,14 +516,15 @@ async function getGlobalSummary(env) {
     fetchAllLatestPrices(env),
     supabaseRequest(env, "/rest/v1/scan_state?id=eq.1&select=*")
   ]);
+  const effectiveRows = canonicalizeOfficialPrices(rows);
   const minima = new Map();
   const monitored = new Set();
-  const monthlyRows = new Map(rows.filter((row) => row.billing_period === "monthly").map((row) => [
+  const monthlyRows = new Map(effectiveRows.filter((row) => row.billing_period === "monthly").map((row) => [
     row.country + ":" + row.provider + ":" + row.plan_id,
     row
   ]));
   let newest = null;
-  for (const row of rows) {
+  for (const row of effectiveRows) {
     monitored.add(row.country);
     if (!newest || row.observed_at > newest) newest = row.observed_at;
     if (row.billing_period === "annual") {
@@ -440,7 +541,7 @@ async function getGlobalSummary(env) {
     monitoredCountries: monitored.size,
     latestPriceRows: rows.length,
     newestObservationAt: newest,
-    results: latestRowsToResults(rows),
+    results: latestRowsToResults(effectiveRows),
     minima: [...minima.values()].sort((a, b) => Number(a.usd_monthly_equivalent) - Number(b.usd_monthly_equivalent))
   };
 }

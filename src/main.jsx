@@ -24,11 +24,13 @@ import {
   X
 } from "lucide-react";
 import {
+  ANTHROPIC_US_PRICING_SOURCE,
   AVAILABILITY_EXCEPTIONS,
   COVERAGE_SUMMARY,
   FALLBACK_RATES,
   ISO_REGION_CODES,
   OFFICIAL_SUPPORT,
+  OPENAI_US_PRICING_SOURCE,
   PRICE_SNAPSHOTS,
   PROVIDERS,
   REGION_META,
@@ -242,6 +244,9 @@ function PriceMonitorCell({ provider, plans, supported, scanning, country, onHis
 }
 
 const formatRelativePercent = (percent) => Math.abs(percent) >= 10 ? Math.abs(percent).toFixed(0) : Math.abs(percent).toFixed(1);
+const usMonthlyBaseline = (plan) => Number.isFinite(plan?.usReferenceAmount) ? plan.usReferenceAmount : plan?.usd;
+const usAnnualBaseline = (plan) => Number.isFinite(plan?.usAnnualReferenceAmount) ? plan.usAnnualReferenceAmount : plan?.annual?.usdTotal;
+const officialUsPricingSource = (provider) => provider === "openai" ? OPENAI_US_PRICING_SOURCE : ANTHROPIC_US_PRICING_SOURCE;
 
 const relativeToUs = (localAmount, usAmount, isUnitedStates) => {
   if (!Number.isFinite(localAmount) || localAmount <= 0 || !Number.isFinite(usAmount) || usAmount <= 0) return null;
@@ -260,11 +265,12 @@ function UsPriceComparisonCell({ country, plans, usPlans, scanning }) {
     <div className="us-comparison-list">
       {(plans || []).map((plan) => {
         const usPlan = usPlanMap.get(plan.id);
-        const monthly = relativeToUs(plan.usd, usPlan?.usd, country === "US");
-        const usAnnual = usPlan?.annual;
-        const hasUsAnnual = Number.isFinite(usAnnual?.usdTotal) && usAnnual.usdTotal > 0;
+        const usMonthly = usMonthlyBaseline(usPlan);
+        const monthly = relativeToUs(plan.usd, usMonthly, country === "US");
+        const usAnnualTotal = usAnnualBaseline(usPlan);
+        const hasUsAnnual = Number.isFinite(usAnnualTotal) && usAnnualTotal > 0;
         const annual = hasUsAnnual
-          ? relativeToUs(plan.annual?.usdTotal, usAnnual.usdTotal, country === "US")
+          ? relativeToUs(plan.annual?.usdTotal, usAnnualTotal, country === "US")
           : null;
         return (
           <div className="us-comparison-row" key={plan.id}>
@@ -273,8 +279,8 @@ function UsPriceComparisonCell({ country, plans, usPlans, scanning }) {
               <span className={monthly?.kind || "unavailable"}><em>月付</em>{monthly?.label || (scanning ? "扫描中" : "暂无可比价格")}</span>
               {hasUsAnnual && <span className={annual?.kind || "unavailable"}><em>年付</em>{annual?.label || (scanning ? "扫描中" : "当地暂无年付价")}</span>}
             </div>
-            {monthly && country !== "US" && <small>当地 {usd(plan.usd)} · 美国 {usd(usPlan.usd)}</small>}
-            {annual && country !== "US" && <small>年付当地 {usd(plan.annual.usdTotal)} · 美国 {usd(usAnnual.usdTotal)}</small>}
+            {monthly && country !== "US" && <small>当地 {usd(plan.usd)} · 美国官网 {usd(usMonthly)}</small>}
+            {annual && country !== "US" && <small>年付当地 {usd(plan.annual.usdTotal)} · 美国官网 {usd(usAnnualTotal)}</small>}
           </div>
         );
       })}
@@ -545,6 +551,25 @@ export default function App() {
   const getRegionPlanPrices = (code, provider) => {
     const live = livePrices[code]?.prices?.find((item) => item.provider === provider);
     if (live?.status === "live" && live.plans) return live.plans.map((plan) => {
+      if (code === "US" && Number.isFinite(plan.usReferenceAmount)) return {
+        ...plan,
+        status: "reference",
+        kind: "reference",
+        display: plan.usReferenceDisplay,
+        amount: plan.usReferenceAmount,
+        currency: "USD",
+        usd: plan.usReferenceAmount,
+        source: officialUsPricingSource(provider),
+        annual: Number.isFinite(plan.usAnnualReferenceAmount) ? {
+          status: "reference",
+          display: plan.usAnnualReferenceDisplay,
+          amount: plan.usAnnualReferenceAmount,
+          currency: "USD",
+          usdTotal: plan.usAnnualReferenceAmount,
+          usdMonthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+          savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+        } : { status: "none", display: "仅月付" }
+      };
       const fx = rates[plan.currency || live.currency];
       const annualFx = rates[plan.annual?.currency || plan.currency || live.currency];
       const annual = plan.annual?.status === "live" && !isPlausibleAnnualPrice(plan.amount, plan.annual.amount)
@@ -569,6 +594,25 @@ export default function App() {
       : null;
     const snapshotPlan = { openai: "plus", anthropic: "pro" }[provider];
     return SUBSCRIPTION_PLANS[provider].map((plan) => {
+      if (code === "US" && Number.isFinite(plan.usReferenceAmount)) return {
+        ...plan,
+        status: "reference",
+        kind: "reference",
+        display: plan.usReferenceDisplay,
+        amount: plan.usReferenceAmount,
+        currency: "USD",
+        usd: plan.usReferenceAmount,
+        annual: Number.isFinite(plan.usAnnualReferenceAmount) ? {
+          status: "reference",
+          display: plan.usAnnualReferenceDisplay,
+          amount: plan.usAnnualReferenceAmount,
+          currency: "USD",
+          usdTotal: plan.usAnnualReferenceAmount,
+          usdMonthlyEquivalent: plan.usAnnualReferenceAmount / 12,
+          savingPercent: Math.round((1 - plan.usAnnualReferenceAmount / 12 / plan.usReferenceAmount) * 100)
+        } : { status: "none", display: "仅月付" },
+        source: officialUsPricingSource(provider)
+      };
       if (plan.kind === "reference") return {
         ...plan,
         status: "reference",
@@ -692,19 +736,31 @@ export default function App() {
         usdTotal: Number(storedAnnual.usd_amount),
         usdMonthlyEquivalent: Number(storedAnnual.usd_monthly_equivalent)
       } : annualMinimum;
+      const officialAnnual = Number.isFinite(definition.usAnnualReferenceAmount) ? {
+        status: "reference",
+        code: "US",
+        display: definition.usAnnualReferenceDisplay,
+        usdTotal: definition.usAnnualReferenceAmount,
+        usdMonthlyEquivalent: definition.usAnnualReferenceAmount / 12,
+        savingPercent: Math.round((1 - definition.usAnnualReferenceAmount / 12 / definition.usReferenceAmount) * 100)
+      } : null;
+      const lowestAnnual = [databaseAnnual, officialAnnual]
+        .filter((candidate) => Number.isFinite(candidate?.usdMonthlyEquivalent) && candidate.usdMonthlyEquivalent > 0)
+        .sort((a, b) => a.usdMonthlyEquivalent - b.usdMonthlyEquivalent)[0]
+        || databaseAnnual;
       const monthlyMinimum = [
         ...candidates.map((candidate) => ({ ...candidate, status: "live" })),
         ...(storedMonthly ? [{ code: storedMonthly.country, display: storedMonthly.display, usd: Number(storedMonthly.usd_monthly_equivalent), status: "live" }] : []),
-        ...(definition.minimumReferenceAmount ? [{
+        ...(definition.usReferenceAmount ? [{
           code: "US",
-          display: definition.minimumReferenceDisplay,
-          usd: definition.minimumReferenceAmount,
+          display: definition.usReferenceDisplay,
+          usd: definition.usReferenceAmount,
           status: "reference"
         }] : [])
       ].filter((candidate) => Number.isFinite(candidate.usd) && candidate.usd > 0)
         .sort((a, b) => a.usd - b.usd)[0];
       return monthlyMinimum
-        ? { ...definition, ...monthlyMinimum, annualMinimum: databaseAnnual }
+        ? { ...definition, ...monthlyMinimum, annualMinimum: lowestAnnual }
         : { ...definition, display: "暂无当地价", usd: null, status: "pending", annualMinimum };
     }).sort((a, b) => planSortValue(a) - planSortValue(b))
   })), [activeProvider, livePrices, rates, storedMinimums]);
@@ -773,18 +829,17 @@ export default function App() {
 
   const catalogRows = useMemo(() => {
     const usSelectedPlan = usComparisonPlans.find((plan) => plan.id === selectedPlanId);
-    const usMonthlyUsd = usSelectedPlan?.status === "live" && Number.isFinite(usSelectedPlan.usd) ? usSelectedPlan.usd : null;
-    const usAnnualUsd = usSelectedPlan?.annual?.status === "live" && Number.isFinite(usSelectedPlan.annual.usdTotal)
-      ? usSelectedPlan.annual.usdTotal
-      : null;
+    const usMonthlyUsd = usMonthlyBaseline(usSelectedPlan);
+    const usAnnualUsd = usAnnualBaseline(usSelectedPlan);
     const rawRows = activeRegionCodes.map((code) => {
       const selectedPlan = getRegionPlanPrices(code, activeProvider).find((plan) => plan.id === selectedPlanId);
       const priced = ["live", "reference"].includes(selectedPlan?.status)
         && Number.isFinite(selectedPlan?.usd) && selectedPlan.usd > 0;
-      const monthlyUsd = selectedPlan?.status === "live" && Number.isFinite(selectedPlan.usd) && selectedPlan.usd > 0
+      const isUsOfficialReference = code === "US" && selectedPlan?.status === "reference";
+      const monthlyUsd = (selectedPlan?.status === "live" || isUsOfficialReference) && Number.isFinite(selectedPlan.usd) && selectedPlan.usd > 0
         ? selectedPlan.usd
         : null;
-      const annualUsd = selectedPlan?.annual?.status === "live" && Number.isFinite(selectedPlan.annual.usdTotal) && selectedPlan.annual.usdTotal > 0
+      const annualUsd = (selectedPlan?.annual?.status === "live" || (isUsOfficialReference && selectedPlan?.annual?.status === "reference")) && Number.isFinite(selectedPlan.annual.usdTotal) && selectedPlan.annual.usdTotal > 0
         ? selectedPlan.annual.usdTotal
         : null;
       const monthlyDiscount = monthlyUsd && usMonthlyUsd ? (1 - monthlyUsd / usMonthlyUsd) * 100 : null;
