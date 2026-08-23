@@ -80,14 +80,7 @@ const LOCAL_STORAGE_KEYS = {
   alertEvents: "modelrate:alert-events:v1"
 };
 
-const CATALOG_PLAN_SORTS = [
-  { value: "plan:openai:plus", provider: "openai", planId: "plus", label: "ChatGPT Plus" },
-  { value: "plan:openai:pro5", provider: "openai", planId: "pro5", label: "ChatGPT Pro 5x" },
-  { value: "plan:openai:pro20", provider: "openai", planId: "pro20", label: "ChatGPT Pro 20x" },
-  { value: "plan:anthropic:pro", provider: "anthropic", planId: "pro", label: "Claude Pro" },
-  { value: "plan:anthropic:max5", provider: "anthropic", planId: "max5", label: "Claude Max 5x" },
-  { value: "plan:anthropic:max20", provider: "anthropic", planId: "max20", label: "Claude Max 20x" }
-];
+const DEFAULT_PLAN_IDS = { openai: "plus", anthropic: "pro" };
 
 const PROVIDER_PAGES = {
   openai: {
@@ -300,6 +293,7 @@ export default function App() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogFilter, setCatalogFilter] = useState("ALL");
   const [catalogSort, setCatalogSort] = useState("name");
+  const [selectedPlanId, setSelectedPlanId] = useState(() => DEFAULT_PLAN_IDS[activeProvider]);
   const [catalogExpanded, setCatalogExpanded] = useState(false);
   const [livePrices, setLivePrices] = useState({});
   const [scanningCodes, setScanningCodes] = useState([]);
@@ -320,7 +314,8 @@ export default function App() {
   const localAlertRulesRef = useRef(localAlertRules);
   const scanInProgressRef = useRef(false);
   const activePage = PROVIDER_PAGES[activeProvider];
-  const activePlanSorts = CATALOG_PLAN_SORTS.filter((option) => option.provider === activeProvider);
+  const activePlanDefinition = SUBSCRIPTION_PLANS[activeProvider].find((plan) => plan.id === selectedPlanId)
+    || SUBSCRIPTION_PLANS[activeProvider][0];
   const activeRegionCodes = ISO_REGION_CODES.filter((code) => availabilityFor(activeProvider, code).kind !== "unlisted");
   const monitoredActiveRegionCount = activeRegionCodes.filter((code) => livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live")).length;
   const alertRegionCodes = ISO_REGION_CODES.filter((code) => alertForm.provider
@@ -333,6 +328,7 @@ export default function App() {
     setCatalogQuery("");
     setCatalogFilter("ALL");
     setCatalogSort("name");
+    setSelectedPlanId(DEFAULT_PLAN_IDS[provider]);
     setCatalogExpanded(false);
     setAlertForm((current) => ({ ...current, provider, planId: "" }));
     setMenuOpen(false);
@@ -357,6 +353,7 @@ export default function App() {
       setActiveProvider(provider);
       setCatalogFilter("ALL");
       setCatalogSort("name");
+      setSelectedPlanId(DEFAULT_PLAN_IDS[provider]);
       setAlertForm((current) => ({ ...current, provider, planId: "" }));
     };
     if (window.location.pathname === "/" || window.location.pathname === "/index.html") {
@@ -773,21 +770,17 @@ export default function App() {
   };
 
   const catalogRows = useMemo(() => {
-    const planSort = activePlanSorts.find((option) => option.value === catalogSort);
     return activeRegionCodes.map((code) => {
-      const liveChecked = livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live");
-      const lowest = lowestRegionPrice(code);
-      const selectedPlan = planSort
-        ? getRegionPlanPrices(code, planSort.provider).find((plan) => plan.id === planSort.planId)
-        : null;
+      const selectedPlan = getRegionPlanPrices(code, activeProvider).find((plan) => plan.id === selectedPlanId);
+      const priced = ["live", "reference"].includes(selectedPlan?.status)
+        && Number.isFinite(selectedPlan?.usd) && selectedPlan.usd > 0;
       return {
         code,
         name: zhRegionNames.of(code),
         englishName: enRegionNames.of(code),
         flag: flagFromCode(code),
-        priced: Boolean(REGION_META[code]) || liveChecked,
-        lowestUsd: lowest?.plan.usd ?? Number.POSITIVE_INFINITY,
-        selectedPlanUsd: selectedPlan?.status === "live" && Number.isFinite(selectedPlan.usd) && selectedPlan.usd > 0
+        priced,
+        selectedPlanUsd: priced
           ? selectedPlan.usd
           : Number.POSITIVE_INFINITY
       };
@@ -801,11 +794,10 @@ export default function App() {
         || (catalogFilter === "PRICED" && item.priced);
       return matchesQuery && matchesFilter;
     }).sort((a, b) => {
-      if (catalogSort === "priceAsc") return a.lowestUsd - b.lowestUsd || a.name.localeCompare(b.name, "zh-CN");
-      if (planSort) return a.selectedPlanUsd - b.selectedPlanUsd || a.name.localeCompare(b.name, "zh-CN");
+      if (catalogSort === "priceAsc") return a.selectedPlanUsd - b.selectedPlanUsd || a.name.localeCompare(b.name, "zh-CN");
       return a.name.localeCompare(b.name, "zh-CN");
     });
-  }, [activeProvider, catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
+  }, [activeProvider, selectedPlanId, catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
 
   const visibleCatalogRows = catalogExpanded || catalogQuery || catalogFilter !== "ALL"
     ? catalogRows
@@ -918,21 +910,33 @@ export default function App() {
 
           <section className="panel catalog-panel" id="catalog">
             <div className="panel-heading catalog-heading">
-              <div><h2>{activePage.tableTitle}</h2><p>当前页面只展示 {activePage.product} 套餐；每个套餐同时显示月付、年付，并按实时汇率与美国同档价格比较。</p></div>
+              <div><h2>{activePage.product} {activePlanDefinition.name} 全球价格</h2><p>先选择订阅档位，再比较所有支持国家和地区的月付、年付及相对美国价格。</p></div>
               <span className="catalog-total"><i />{collectorStatus}</span>
+            </div>
+            <div className={`catalog-plan-picker ${activeProvider}`}>
+              <span>选择订阅档位</span>
+              <div>
+                {SUBSCRIPTION_PLANS[activeProvider].map((plan) => {
+                  const hasAnnual = Boolean(plan.annualStoreProduct || plan.annualReferenceAmount);
+                  return <button key={plan.id} className={selectedPlanId === plan.id ? "active" : ""} aria-pressed={selectedPlanId === plan.id} onClick={() => { setSelectedPlanId(plan.id); setCatalogSort("name"); setCatalogExpanded(false); }}>
+                    <strong>{plan.name}</strong>
+                    <small>{hasAnnual ? "月付 + 年付" : plan.kind === "quote" ? "官网询价" : "月付"}</small>
+                  </button>;
+                })}
+              </div>
             </div>
             <div className="catalog-toolbar">
               <label className="catalog-search"><Search size={16} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索中文名、英文名或代码…" />{catalogQuery && <button onClick={() => setCatalogQuery("")} aria-label="清除搜索"><X size={15} /></button>}</label>
-              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 {activeRegionCodes.length} 项</option><option value="PRICED">已有价格</option></select><ChevronDown size={14} /></label>
-              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">最低付费套餐：从低到高</option>{activePlanSorts.map((option) => <option key={option.value} value={option.value}>{option.label}：从低到高</option>)}</select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 {activeRegionCodes.length} 项</option><option value="PRICED">{activePlanDefinition.name} 已有价格</option></select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="name">按国家 / 地区</option><option value="priceAsc">{activePlanDefinition.name} 月付：从低到高</option></select><ChevronDown size={14} /></label>
             </div>
             <div className="table-scroll catalog-scroll">
-              <table className={`catalog-table single-provider ${activeProvider}`}>
-                <thead><tr><th><span className="region-column-head">国家 / 地区</span></th><th><div className={`provider-column-head ${activeProvider}`}><ProviderMark id={activeProvider} size="tiny" /><div><strong>{PROVIDERS[activeProvider].name} 全部套餐</strong><small>{SUBSCRIPTION_PLANS[activeProvider].length} 个订阅级别</small></div></div></th><th><span className="lowest-column-head">相对美国定价<small>各档月付 / 年付优惠</small></span></th></tr></thead>
+              <table className={`catalog-table single-provider plan-focused ${activeProvider}`}>
+                <thead><tr><th><span className="region-column-head">国家 / 地区</span></th><th><div className={`provider-column-head ${activeProvider}`}><ProviderMark id={activeProvider} size="tiny" /><div><strong>{PROVIDERS[activeProvider].name} · {activePlanDefinition.name}</strong><small>当地月付 / 年付价格</small></div></div></th><th><span className="lowest-column-head">相对美国定价<small>{activePlanDefinition.name} 月付 / 年付优惠</small></span></th></tr></thead>
                 <tbody>
                   {visibleCatalogRows.map((item) => {
                     const scanning = scanningCodes.includes(item.code);
-                    const regionPlans = getRegionPlanPrices(item.code, activeProvider);
+                    const regionPlans = getRegionPlanPrices(item.code, activeProvider).filter((plan) => plan.id === selectedPlanId);
                     return (
                       <tr key={item.code}>
                         <td><div className="region-cell"><span>{item.flag}</span><div><strong>{item.name}</strong><small>{item.englishName} · {item.code}</small>{livePrices[item.code] && <em>监测于 {new Date(livePrices[item.code].checkedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</em>}</div></div></td>
@@ -946,7 +950,7 @@ export default function App() {
               {!visibleCatalogRows.length && <div className="empty-state">没有找到相符的国家或地区。</div>}
             </div>
             <footer className="catalog-footer">
-              <span><Info size={14} />优惠按当地价格的美元折算值与美国同档价格计算；年付仅在美国和当地均有有效年付价格时比较。</span>
+              <span><Info size={14} />当前展示 {activePlanDefinition.name}；优惠按当地价格的美元折算值与美国同档价格计算，年付仅在双方均有有效年付价格时比较。</span>
               {!catalogExpanded && !catalogQuery && catalogFilter === "ALL" ? <button onClick={() => setCatalogExpanded(true)}>显示全部 {activeRegionCodes.length} 项 <ChevronDown size={14} /></button> : <span>当前显示 {visibleCatalogRows.length} 项</span>}
             </footer>
           </section>
