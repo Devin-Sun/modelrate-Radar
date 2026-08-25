@@ -96,6 +96,7 @@ export const PRICE_SNAPSHOTS = [
 
 export const FALLBACK_RATES = {
   USD: 1,
+  CNY: 6.7227,
   GBP: 0.74407,
   EUR: 0.868722,
   JPY: 157.167068,
