@@ -26,7 +26,6 @@ import {
 import {
   ANTHROPIC_US_PRICING_SOURCE,
   AVAILABILITY_EXCEPTIONS,
-  COVERAGE_SUMMARY,
   FALLBACK_RATES,
   ISO_REGION_CODES,
   OFFICIAL_SUPPORT,
@@ -63,6 +62,13 @@ const usd = (amount) =>
     currency: "USD",
     maximumFractionDigits: 2
   }).format(amount);
+
+const cny = (amount, rate) =>
+  new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency: "CNY",
+    maximumFractionDigits: 2
+  }).format(amount * rate);
 
 const annualComparison = (savingPercent) => {
   if (savingPercent > 0) return ` · 省 ${savingPercent}%`;
@@ -323,6 +329,7 @@ export default function App() {
   const localAlertRulesRef = useRef(localAlertRules);
   const scanInProgressRef = useRef(false);
   const activePage = PROVIDER_PAGES[activeProvider];
+  const cnyRate = rates.CNY || FALLBACK_RATES.CNY;
   const activePlanDefinition = SUBSCRIPTION_PLANS[activeProvider].find((plan) => plan.id === selectedPlanId)
     || SUBSCRIPTION_PLANS[activeProvider][0];
   const activePlanTabs = SUBSCRIPTION_PLANS[activeProvider].flatMap((plan) => {
@@ -667,13 +674,6 @@ export default function App() {
     });
   };
 
-  const lowestRegionPrice = (code) => availabilityFor(activeProvider, code).kind !== "unlisted"
-    ? getRegionPlanPrices(code, activeProvider)
-      .map((plan) => ({ provider: activeProvider, plan }))
-      .filter((item) => item.plan?.status === "live" && Number.isFinite(item.plan?.usd) && item.plan.usd > 0)
-      .sort((a, b) => a.plan.usd - b.plan.usd)[0]
-    : null;
-
   const usComparisonPlans = getRegionPlanPrices("US", activeProvider);
 
   const browserGlobalCheapest = activeRegionCodes
@@ -688,90 +688,6 @@ export default function App() {
     provider: storedGlobalCheapest.provider,
     plan: { name: storedGlobalCheapest.plan_name, usd: Number(storedGlobalCheapest.usd_monthly_equivalent) }
   } : browserGlobalCheapest;
-
-  const storedMinimums = useMemo(() => new Map((globalSummary?.minima || []).map((item) => [
-    `${item.provider}:${item.plan_id}:${item.billing_period}`,
-    item
-  ])), [globalSummary]);
-
-  const providerPlanMinimums = useMemo(() => [activeProvider].map((provider) => ({
-    provider,
-    plans: SUBSCRIPTION_PLANS[provider].map((definition) => {
-      if (definition.kind === "reference") return {
-        ...definition,
-        display: definition.referenceDisplay,
-        usd: definition.referenceAmount,
-        status: "reference",
-        annualMinimum: definition.annualReferenceAmount ? {
-          status: "reference",
-          display: definition.annualReferenceDisplay,
-          usdTotal: definition.annualReferenceAmount,
-          usdMonthlyEquivalent: definition.annualReferenceAmount / 12,
-          savingPercent: Math.round((1 - definition.annualReferenceAmount / 12 / definition.referenceAmount) * 100)
-        } : { status: "none", display: "仅月付" }
-      };
-      if (definition.kind === "quote") return { ...definition, display: "官网询价", usd: null, status: "quote", annualMinimum: { status: "quote", display: "官网询价" } };
-      const observedPlans = Object.entries(livePrices).flatMap(([code, result]) => {
-        if (availabilityFor(provider, code).kind === "unlisted") return [];
-        const providerResult = result.prices?.find((item) => item.provider === provider);
-        const plan = providerResult?.plans?.find((item) => item.id === definition.id);
-        return plan ? [{ code, providerResult, plan }] : [];
-      });
-      const candidates = observedPlans.flatMap(({ code, providerResult, plan }) => {
-        const fx = rates[plan.currency || providerResult.currency];
-        if (plan.status !== "live" || !Number.isFinite(plan.amount) || plan.amount <= 0 || !fx) return [];
-        return [{ code, ...plan, usd: plan.amount / fx }];
-      }).sort((a, b) => a.usd - b.usd);
-      const annualCandidates = observedPlans.flatMap(({ code, providerResult, plan }) => {
-        const fx = rates[plan.annual?.currency || plan.currency || providerResult.currency];
-        if (plan.annual?.status !== "live" || !Number.isFinite(plan.annual.amount) || plan.annual.amount <= 0 || !fx) return [];
-        return [{
-          code,
-          ...plan.annual,
-          usdTotal: plan.annual.amount / fx,
-          usdMonthlyEquivalent: plan.annual.amount / 12 / fx
-        }];
-      }).sort((a, b) => a.usdMonthlyEquivalent - b.usdMonthlyEquivalent);
-      const annualMinimum = annualCandidates[0] || (definition.annualKind === "login"
-        ? { status: "login", display: "登录官网查看" }
-        : { status: "none", display: "仅月付" });
-      const storedMonthly = storedMinimums.get(`${provider}:${definition.id}:monthly`);
-      const storedAnnual = storedMinimums.get(`${provider}:${definition.id}:annual`);
-      const databaseAnnual = storedAnnual ? {
-        status: "live",
-        code: storedAnnual.country,
-        display: storedAnnual.display,
-        usdTotal: Number(storedAnnual.usd_amount),
-        usdMonthlyEquivalent: Number(storedAnnual.usd_monthly_equivalent)
-      } : annualMinimum;
-      const officialAnnual = Number.isFinite(definition.usAnnualReferenceAmount) ? {
-        status: "reference",
-        code: "US",
-        display: definition.usAnnualReferenceDisplay,
-        usdTotal: definition.usAnnualReferenceAmount,
-        usdMonthlyEquivalent: definition.usAnnualReferenceAmount / 12,
-        savingPercent: Math.round((1 - definition.usAnnualReferenceAmount / 12 / definition.usReferenceAmount) * 100)
-      } : null;
-      const lowestAnnual = [databaseAnnual, officialAnnual]
-        .filter((candidate) => Number.isFinite(candidate?.usdMonthlyEquivalent) && candidate.usdMonthlyEquivalent > 0)
-        .sort((a, b) => a.usdMonthlyEquivalent - b.usdMonthlyEquivalent)[0]
-        || databaseAnnual;
-      const monthlyMinimum = [
-        ...candidates.map((candidate) => ({ ...candidate, status: "live" })),
-        ...(storedMonthly ? [{ code: storedMonthly.country, display: storedMonthly.display, usd: Number(storedMonthly.usd_monthly_equivalent), status: "live" }] : []),
-        ...(definition.usReferenceAmount ? [{
-          code: "US",
-          display: definition.usReferenceDisplay,
-          usd: definition.usReferenceAmount,
-          status: "reference"
-        }] : [])
-      ].filter((candidate) => Number.isFinite(candidate.usd) && candidate.usd > 0)
-        .sort((a, b) => a.usd - b.usd)[0];
-      return monthlyMinimum
-        ? { ...definition, ...monthlyMinimum, annualMinimum: lowestAnnual }
-        : { ...definition, display: "暂无当地价", usd: null, status: "pending", annualMinimum };
-    }).sort((a, b) => planSortValue(a) - planSortValue(b))
-  })), [activeProvider, livePrices, rates, storedMinimums]);
 
   const openHistory = async (target) => {
     setHistoryTarget(target);
@@ -960,7 +876,7 @@ export default function App() {
             </StatCard>
             <StatCard
               label="当前最低可比价"
-              value={globalCheapest ? usd(globalCheapest.plan.usd) : providerFallbackCheapest ? usd(providerFallbackCheapest.usd) : "等待价格"}
+              value={globalCheapest ? cny(globalCheapest.plan.usd, cnyRate) : providerFallbackCheapest ? cny(providerFallbackCheapest.usd, cnyRate) : "等待价格"}
               note={globalCheapest ? `${flagFromCode(globalCheapest.code)} ${zhRegionNames.of(globalCheapest.code)} · ${PROVIDERS[globalCheapest.provider].name} ${globalCheapest.plan.name}` : providerFallbackCheapest ? `${REGION_META[providerFallbackCheapest.region].flag} ${REGION_META[providerFallbackCheapest.region].name}` : "正在采集当前厂商价格"}
               icon={ArrowDownRight}
               accent="#ffd56a"
@@ -972,42 +888,9 @@ export default function App() {
             </StatCard>
           </section>
 
-          <section className="panel coverage-panel">
-            <div className="panel-heading">
-              <div><h2>{activePage.product} 月付 / 年付最低价</h2><p>比较官网公开价与当前已监测的 {monitoredActiveRegionCount} / {activeRegionCodes.length} 个支持地区的当地公开价；年付按总价和折合月价同时展示。</p></div>
-              <span className="coverage-verified"><ShieldCheck size={14} />实时汇率折算</span>
-            </div>
-            <div className="coverage-grid single-provider">
-              {providerPlanMinimums.map(({ provider: id, plans }) => {
-                const coverage = COVERAGE_SUMMARY[id];
-                return <article className="coverage-card plan-minimum-card" key={id}>
-                  <div className="coverage-card-top">
-                    <ProviderMark id={id} />
-                    <div><strong>{PROVIDERS[id].name}</strong><small>{SUBSCRIPTION_PLANS[id].length} 个账户套餐</small></div>
-                  </div>
-                  <div className="plan-minimum-list">
-                    {plans.map((plan) => <div className={`plan-minimum-row ${plan.status}`} key={plan.id}>
-                      <span><strong>{plan.name}</strong><small>{plan.billing}</small></span>
-                      <span className="minimum-price-stack">
-                        <strong><em>月付最低</em>{Number.isFinite(plan.usd) && plan.usd > 0 ? usd(plan.usd) : plan.display}</strong>
-                        {plan.code && <small>{flagFromCode(plan.code)} {zhRegionNames.of(plan.code)} · {plan.display}</small>}
-                        <strong className={`annual-minimum ${plan.annualMinimum?.status || "none"}`}>
-                          <em>年付最低</em>{Number.isFinite(plan.annualMinimum?.usdTotal) ? `${usd(plan.annualMinimum.usdTotal)} / 年` : plan.annualMinimum?.display || "仅月付"}
-                        </strong>
-                        {plan.annualMinimum?.code && <small>{flagFromCode(plan.annualMinimum.code)} {zhRegionNames.of(plan.annualMinimum.code)} · {plan.annualMinimum.display}</small>}
-                        {Number.isFinite(plan.annualMinimum?.usdMonthlyEquivalent) && <small>折合 {usd(plan.annualMinimum.usdMonthlyEquivalent)} / 月{annualComparison(plan.annualMinimum.savingPercent)}</small>}
-                      </span>
-                    </div>)}
-                  </div>
-                  <a href={PROVIDERS[id].source || coverage.source} target="_blank" rel="noreferrer">查看官方套餐说明 <ExternalLink size={14} /></a>
-                </article>;
-              })}
-            </div>
-          </section>
-
           <section className="panel catalog-panel compact-catalog" id="catalog">
             <div className="panel-heading catalog-heading">
-              <div><h2>{activePage.product} {activePlanDefinition.name} 全球价格</h2><p>选择套餐与付款周期，直接比较各地区当地原价、美元折算价和相对美国价格。</p></div>
+              <div><h2>{activePage.product} {activePlanDefinition.name} 全球价格</h2><p>选择套餐与付款周期，直接比较各地区当地原价、人民币折算价和相对美国价格。</p></div>
               <span className="catalog-total"><i />{collectorStatus}</span>
             </div>
             <div className={`plan-tab-strip ${activeProvider}`} role="tablist" aria-label="选择订阅套餐">
@@ -1026,7 +909,7 @@ export default function App() {
             <div className="catalog-comparison-layout">
               <div className="table-scroll catalog-scroll">
                 <table className={`catalog-table simple-price-table ${activeProvider}`}>
-                  <thead><tr><th>排名</th><th><span className="region-column-head">国家 / 地区</span></th><th>当地原价</th><th>美元折算</th><th>相对美国</th><th>状态</th></tr></thead>
+                  <thead><tr><th>排名</th><th><span className="region-column-head">国家 / 地区</span></th><th>当地原价</th><th>人民币折算</th><th>相对美国</th><th>状态</th></tr></thead>
                   <tbody>
                     {visibleCatalogRows.map((item) => {
                       const scanning = scanningCodes.includes(item.code);
@@ -1035,7 +918,7 @@ export default function App() {
                           <td><span className="price-rank">{item.rank || "—"}</span></td>
                           <td><div className="region-cell"><span>{item.flag}</span><div><strong>{item.name}</strong><small>{item.englishName} · {item.code}</small></div></div></td>
                           <td><div className="local-price-stack"><strong>{item.price?.display || (scanning ? "采集中…" : "暂未取得")}</strong>{selectedBilling === "annual" && item.priced && <small>年付总价</small>}</div></td>
-                          <td><div className="converted-price"><strong>{item.priced ? usd(item.comparableUsd) : "—"}</strong><small>/ 月</small></div></td>
+                          <td><div className="converted-price"><strong>{item.priced ? cny(item.comparableUsd, cnyRate) : "—"}</strong><small>/ 月</small></div></td>
                           <td>{item.comparison ? <span className={`us-price-badge ${item.comparison.kind}`}>{item.comparison.label}</span> : <span className="comparison-empty">—</span>}</td>
                           <td>{item.priced ? <div className="price-row-actions"><span className={item.rank === 1 ? "price-status lowest" : "price-status verified"}>{item.rank === 1 ? "最低" : "已核价"}</span>{item.selectedPlan?.status === "live" && <button className="history-button compact" onClick={() => openHistory({ country: item.code, provider: activeProvider, plan: item.selectedPlan })}><History size={11} />历史</button>}</div> : <span className="monitor-loading queued"><RefreshCw className={scanning ? "spin" : ""} size={12} />{scanning ? "采集中" : "待核价"}</span>}</td>
                         </tr>
@@ -1048,7 +931,7 @@ export default function App() {
               <aside className="price-insight-column">
                 <div className="minimum-summary-card">
                   <span>最低价格</span>
-                  <strong>{catalogMinimum ? usd(catalogMinimum.comparableUsd) : "暂无"}</strong>
+                  <strong>{catalogMinimum ? cny(catalogMinimum.comparableUsd, cnyRate) : "暂无"}</strong>
                   <small className="price-period-label">{selectedBilling === "annual" ? "年付折合每月" : "每月"}</small>
                   {catalogMinimum && <div className="minimum-region"><span>{catalogMinimum.flag}</span>{catalogMinimum.name}</div>}
                   {Number.isFinite(catalogSaving) && <small className="saving-comparison"><ArrowDownRight size={14} />比最高价省 {catalogSaving}%</small>}
@@ -1057,14 +940,14 @@ export default function App() {
                   <div className="distribution-heading"><strong>价格分布</strong><span>最低 8 个地区</span></div>
                   <div className="distribution-list">
                     {distributionRows.map((item, index) => <div className="distribution-row" key={item.code}>
-                      <span>{item.code}</span><i><b className={index === 0 ? "minimum" : ""} style={{ width: `${Math.max(12, item.comparableUsd / (distributionMaximum || item.comparableUsd) * 100)}%` }} /></i><em>{usd(item.comparableUsd)}</em>
+                      <span>{item.code}</span><i><b className={index === 0 ? "minimum" : ""} style={{ width: `${Math.max(12, item.comparableUsd / (distributionMaximum || item.comparableUsd) * 100)}%` }} /></i><em>{cny(item.comparableUsd, cnyRate)}</em>
                     </div>)}
                   </div>
                 </div>
               </aside>
             </div>
             <footer className="catalog-footer">
-              <span><Info size={14} />当前展示 {activePlanDefinition.name} {selectedBilling === "annual" ? "年付" : "月付"}；年付统一按折合月价排序，相对美国价格使用同档官方价。</span>
+              <span><Info size={14} />当前展示 {activePlanDefinition.name} {selectedBilling === "annual" ? "年付" : "月付"}；人民币按实时汇率折算，年付统一按折合月价排序。</span>
               {!catalogExpanded && !catalogQuery && catalogFilter === "ALL" ? <button onClick={() => setCatalogExpanded(true)}>显示全部 {activeRegionCodes.length} 项 <ChevronDown size={14} /></button> : <span>当前显示 {visibleCatalogRows.length} 项</span>}
             </footer>
           </section>
