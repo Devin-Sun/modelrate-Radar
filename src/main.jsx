@@ -302,6 +302,7 @@ export default function App() {
   const [catalogFilter, setCatalogFilter] = useState("ALL");
   const [catalogSort, setCatalogSort] = useState("priceAsc");
   const [selectedPlanId, setSelectedPlanId] = useState(() => DEFAULT_PLAN_IDS[activeProvider]);
+  const [selectedBilling, setSelectedBilling] = useState("monthly");
   const [catalogExpanded, setCatalogExpanded] = useState(false);
   const [livePrices, setLivePrices] = useState({});
   const [scanningCodes, setScanningCodes] = useState([]);
@@ -324,6 +325,11 @@ export default function App() {
   const activePage = PROVIDER_PAGES[activeProvider];
   const activePlanDefinition = SUBSCRIPTION_PLANS[activeProvider].find((plan) => plan.id === selectedPlanId)
     || SUBSCRIPTION_PLANS[activeProvider][0];
+  const activePlanTabs = SUBSCRIPTION_PLANS[activeProvider].flatMap((plan) => {
+    const monthly = [{ planId: plan.id, billing: "monthly", label: `${activePage.product} ${plan.name}`, period: "月付" }];
+    const hasAnnual = Boolean(plan.annualStoreProduct || plan.annualReferenceAmount || plan.usAnnualReferenceAmount);
+    return hasAnnual ? [...monthly, { planId: plan.id, billing: "annual", label: `${activePage.product} ${plan.name}`, period: "年付" }] : monthly;
+  });
   const activeRegionCodes = ISO_REGION_CODES.filter((code) => availabilityFor(activeProvider, code).kind !== "unlisted");
   const monitoredActiveRegionCount = activeRegionCodes.filter((code) => livePrices[code]?.prices?.some((price) => price.provider === activeProvider && price.status === "live")).length;
   const alertRegionCodes = ISO_REGION_CODES.filter((code) => alertForm.provider
@@ -337,6 +343,7 @@ export default function App() {
     setCatalogFilter("ALL");
     setCatalogSort("priceAsc");
     setSelectedPlanId(DEFAULT_PLAN_IDS[provider]);
+    setSelectedBilling("monthly");
     setCatalogExpanded(false);
     setAlertForm((current) => ({ ...current, provider, planId: "" }));
     setMenuOpen(false);
@@ -362,6 +369,7 @@ export default function App() {
       setCatalogFilter("ALL");
       setCatalogSort("priceAsc");
       setSelectedPlanId(DEFAULT_PLAN_IDS[provider]);
+      setSelectedBilling("monthly");
       setAlertForm((current) => ({ ...current, provider, planId: "" }));
     };
     if (window.location.pathname === "/" || window.location.pathname === "/index.html") {
@@ -827,46 +835,44 @@ export default function App() {
     }
   };
 
-  const catalogRows = useMemo(() => {
+  const allCatalogRows = useMemo(() => {
     const usSelectedPlan = usComparisonPlans.find((plan) => plan.id === selectedPlanId);
-    const usMonthlyUsd = usMonthlyBaseline(usSelectedPlan);
-    const usAnnualUsd = usAnnualBaseline(usSelectedPlan);
+    const usComparable = selectedBilling === "annual"
+      ? (Number.isFinite(usAnnualBaseline(usSelectedPlan)) ? usAnnualBaseline(usSelectedPlan) / 12 : null)
+      : usMonthlyBaseline(usSelectedPlan);
     const rawRows = activeRegionCodes.map((code) => {
       const selectedPlan = getRegionPlanPrices(code, activeProvider).find((plan) => plan.id === selectedPlanId);
-      const priced = ["live", "reference"].includes(selectedPlan?.status)
-        && Number.isFinite(selectedPlan?.usd) && selectedPlan.usd > 0;
       const isUsOfficialReference = code === "US" && selectedPlan?.status === "reference";
-      const monthlyUsd = (selectedPlan?.status === "live" || isUsOfficialReference) && Number.isFinite(selectedPlan.usd) && selectedPlan.usd > 0
-        ? selectedPlan.usd
+      const monthlyUsd = (selectedPlan?.status === "live" || isUsOfficialReference) && Number.isFinite(selectedPlan?.usd) && selectedPlan.usd > 0
+        ? selectedPlan?.usd
         : null;
       const annualUsd = (selectedPlan?.annual?.status === "live" || (isUsOfficialReference && selectedPlan?.annual?.status === "reference")) && Number.isFinite(selectedPlan.annual.usdTotal) && selectedPlan.annual.usdTotal > 0
         ? selectedPlan.annual.usdTotal
         : null;
-      const monthlyDiscount = monthlyUsd && usMonthlyUsd ? (1 - monthlyUsd / usMonthlyUsd) * 100 : null;
-      const annualDiscount = annualUsd && usAnnualUsd ? (1 - annualUsd / usAnnualUsd) * 100 : null;
+      const comparableUsd = selectedBilling === "annual" && Number.isFinite(annualUsd)
+        ? annualUsd / 12
+        : selectedBilling === "monthly" ? monthlyUsd : null;
+      const comparison = relativeToUs(comparableUsd, usComparable, code === "US");
       return {
         code,
         name: zhRegionNames.of(code),
         englishName: enRegionNames.of(code),
         flag: flagFromCode(code),
-        priced,
-        monthlyUsd,
-        annualUsd,
-        monthlyDiscount: monthlyDiscount > 0.05 ? monthlyDiscount : null,
-        annualDiscount: annualDiscount > 0.05 ? annualDiscount : null,
-        selectedPlanUsd: priced
-          ? selectedPlan.usd
-          : Number.POSITIVE_INFINITY
+        selectedPlan,
+        price: selectedBilling === "annual" ? selectedPlan?.annual : selectedPlan,
+        priced: Number.isFinite(comparableUsd) && comparableUsd > 0,
+        comparableUsd: Number.isFinite(comparableUsd) && comparableUsd > 0 ? comparableUsd : Number.POSITIVE_INFINITY,
+        comparison,
+        hasDiscount: comparison?.kind === "discount"
       };
     });
-    const monthlyMinimum = Math.min(...rawRows.map((item) => item.monthlyUsd).filter(Number.isFinite));
-    const annualMinimum = Math.min(...rawRows.map((item) => item.annualUsd).filter(Number.isFinite));
-    return rawRows.map((item) => ({
-      ...item,
-      hasDiscount: Boolean(item.monthlyDiscount || item.annualDiscount),
-      isMonthlyLowest: Number.isFinite(monthlyMinimum) && Number.isFinite(item.monthlyUsd) && Math.abs(item.monthlyUsd - monthlyMinimum) < 0.005,
-      isAnnualLowest: Number.isFinite(annualMinimum) && Number.isFinite(item.annualUsd) && Math.abs(item.annualUsd - annualMinimum) < 0.005
-    })).filter((item) => {
+    const rankedCodes = rawRows.filter((item) => item.priced)
+      .sort((a, b) => a.comparableUsd - b.comparableUsd)
+      .map((item) => item.code);
+    return rawRows.map((item) => ({ ...item, rank: item.priced ? rankedCodes.indexOf(item.code) + 1 : null }));
+  }, [activeProvider, selectedPlanId, selectedBilling, livePrices, rates]);
+
+  const catalogRows = useMemo(() => allCatalogRows.filter((item) => {
       const needle = catalogQuery.trim().toLowerCase();
       const isRegionCode = /^[a-z]{2}$/.test(needle);
       const matchesQuery = !needle || (isRegionCode
@@ -877,10 +883,18 @@ export default function App() {
         || (catalogFilter === "DEALS" && item.hasDiscount);
       return matchesQuery && matchesFilter;
     }).sort((a, b) => {
-      if (catalogSort === "priceAsc") return a.selectedPlanUsd - b.selectedPlanUsd || a.name.localeCompare(b.name, "zh-CN");
+      if (catalogSort === "priceAsc") return a.comparableUsd - b.comparableUsd || a.name.localeCompare(b.name, "zh-CN");
       return a.name.localeCompare(b.name, "zh-CN");
-    });
-  }, [activeProvider, selectedPlanId, catalogQuery, catalogFilter, catalogSort, livePrices, rates]);
+    }), [allCatalogRows, catalogQuery, catalogFilter, catalogSort]);
+
+  const pricedCatalogRows = allCatalogRows.filter((item) => item.priced).sort((a, b) => a.comparableUsd - b.comparableUsd);
+  const catalogMinimum = pricedCatalogRows[0];
+  const catalogMaximum = pricedCatalogRows.at(-1);
+  const catalogSaving = catalogMinimum && catalogMaximum && catalogMaximum.comparableUsd > 0
+    ? Math.round((1 - catalogMinimum.comparableUsd / catalogMaximum.comparableUsd) * 100)
+    : null;
+  const distributionRows = pricedCatalogRows.slice(0, 8);
+  const distributionMaximum = distributionRows.at(-1)?.comparableUsd;
 
   const visibleCatalogRows = catalogExpanded || catalogQuery || catalogFilter !== "ALL"
     ? catalogRows
@@ -991,49 +1005,66 @@ export default function App() {
             </div>
           </section>
 
-          <section className="panel catalog-panel" id="catalog">
+          <section className="panel catalog-panel compact-catalog" id="catalog">
             <div className="panel-heading catalog-heading">
-              <div><h2>{activePage.product} {activePlanDefinition.name} 全球价格</h2><p>先选择订阅档位，再比较所有支持国家和地区的月付、年付及相对美国价格。</p></div>
+              <div><h2>{activePage.product} {activePlanDefinition.name} 全球价格</h2><p>选择套餐与付款周期，直接比较各地区当地原价、美元折算价和相对美国价格。</p></div>
               <span className="catalog-total"><i />{collectorStatus}</span>
             </div>
-            <div className={`catalog-plan-picker ${activeProvider}`}>
-              <span>选择订阅档位</span>
-              <div>
-                {SUBSCRIPTION_PLANS[activeProvider].map((plan) => {
-                  const hasAnnual = Boolean(plan.annualStoreProduct || plan.annualReferenceAmount);
-                  return <button key={plan.id} className={selectedPlanId === plan.id ? "active" : ""} aria-pressed={selectedPlanId === plan.id} onClick={() => { setSelectedPlanId(plan.id); setCatalogSort("priceAsc"); setCatalogExpanded(false); }}>
-                    <strong>{plan.name}</strong>
-                    <small>{hasAnnual ? "月付 + 年付" : plan.kind === "quote" ? "官网询价" : "月付"}</small>
-                  </button>;
-                })}
-              </div>
+            <div className={`plan-tab-strip ${activeProvider}`} role="tablist" aria-label="选择订阅套餐">
+              {activePlanTabs.map((option) => {
+                const active = selectedPlanId === option.planId && selectedBilling === option.billing;
+                return <button key={`${option.planId}:${option.billing}`} type="button" role="tab" aria-selected={active} className={active ? "active" : ""} onClick={() => { setSelectedPlanId(option.planId); setSelectedBilling(option.billing); setCatalogSort("priceAsc"); setCatalogExpanded(false); }}>
+                  <span>{option.label}</span><small>{option.period}</small>
+                </button>;
+              })}
             </div>
             <div className="catalog-toolbar">
               <label className="catalog-search"><Search size={16} /><input value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="搜索中文名、英文名或代码…" />{catalogQuery && <button onClick={() => setCatalogQuery("")} aria-label="清除搜索"><X size={15} /></button>}</label>
               <label className="select-control catalog-select"><Filter size={15} /><select value={catalogFilter} onChange={(event) => setCatalogFilter(event.target.value)}><option value="ALL">全部 {activeRegionCodes.length} 项</option><option value="DEALS">低于美国的优惠地区</option><option value="PRICED">{activePlanDefinition.name} 已有价格</option></select><ChevronDown size={14} /></label>
-              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="priceAsc">{activePlanDefinition.name} 月付：从低到高</option><option value="name">按国家 / 地区</option></select><ChevronDown size={14} /></label>
+              <label className="select-control catalog-select sort-select"><ArrowDownRight size={15} /><select value={catalogSort} onChange={(event) => setCatalogSort(event.target.value)}><option value="priceAsc">{activePlanDefinition.name} {selectedBilling === "annual" ? "年付" : "月付"}：从低到高</option><option value="name">按国家 / 地区</option></select><ChevronDown size={14} /></label>
             </div>
-            <div className="table-scroll catalog-scroll">
-              <table className={`catalog-table single-provider plan-focused ${activeProvider}`}>
-                <thead><tr><th><span className="region-column-head">国家 / 地区</span></th><th><div className={`provider-column-head ${activeProvider}`}><ProviderMark id={activeProvider} size="tiny" /><div><strong>{PROVIDERS[activeProvider].name} · {activePlanDefinition.name}</strong><small>当地月付 / 年付价格</small></div></div></th><th><span className="lowest-column-head">相对美国定价<small>{activePlanDefinition.name} 月付 / 年付优惠</small></span></th></tr></thead>
-                <tbody>
-                  {visibleCatalogRows.map((item) => {
-                    const scanning = scanningCodes.includes(item.code);
-                    const regionPlans = getRegionPlanPrices(item.code, activeProvider).filter((plan) => plan.id === selectedPlanId);
-                    return (
-                      <tr className={`${item.hasDiscount ? "deal-region" : ""} ${item.isMonthlyLowest || item.isAnnualLowest ? "global-lowest-region" : ""}`} key={item.code}>
-                        <td><div className="region-cell"><span>{item.flag}</span><div><strong>{item.name}</strong><small>{item.englishName} · {item.code}</small><div className="region-deal-badges">{item.isMonthlyLowest && <span className="best">全球月付最低</span>}{item.isAnnualLowest && <span className="best annual">全球年付最低</span>}{item.monthlyDiscount && <span className="discount">月付省 {formatRelativePercent(item.monthlyDiscount)}%</span>}{item.annualDiscount && <span className="discount annual">年付省 {formatRelativePercent(item.annualDiscount)}%</span>}</div>{livePrices[item.code] && <em>监测于 {new Date(livePrices[item.code].checkedAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}</em>}</div></div></td>
-                        <td><PriceMonitorCell country={item.code} provider={activeProvider} plans={regionPlans} supported={availabilityFor(activeProvider, item.code).kind !== "unlisted"} scanning={scanning} onHistory={openHistory} /></td>
-                        <td><UsPriceComparisonCell country={item.code} plans={regionPlans} usPlans={usComparisonPlans} scanning={scanning} /></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {!visibleCatalogRows.length && <div className="empty-state">没有找到相符的国家或地区。</div>}
+            <div className="catalog-comparison-layout">
+              <div className="table-scroll catalog-scroll">
+                <table className={`catalog-table simple-price-table ${activeProvider}`}>
+                  <thead><tr><th>排名</th><th><span className="region-column-head">国家 / 地区</span></th><th>当地原价</th><th>美元折算</th><th>相对美国</th><th>状态</th></tr></thead>
+                  <tbody>
+                    {visibleCatalogRows.map((item) => {
+                      const scanning = scanningCodes.includes(item.code);
+                      return (
+                        <tr className={`${item.rank === 1 ? "best-price-row" : ""} ${item.hasDiscount ? "deal-region" : ""}`} key={item.code}>
+                          <td><span className="price-rank">{item.rank || "—"}</span></td>
+                          <td><div className="region-cell"><span>{item.flag}</span><div><strong>{item.name}</strong><small>{item.englishName} · {item.code}</small></div></div></td>
+                          <td><div className="local-price-stack"><strong>{item.price?.display || (scanning ? "采集中…" : "暂未取得")}</strong>{selectedBilling === "annual" && item.priced && <small>年付总价</small>}</div></td>
+                          <td><div className="converted-price"><strong>{item.priced ? usd(item.comparableUsd) : "—"}</strong><small>/ 月</small></div></td>
+                          <td>{item.comparison ? <span className={`us-price-badge ${item.comparison.kind}`}>{item.comparison.label}</span> : <span className="comparison-empty">—</span>}</td>
+                          <td>{item.priced ? <div className="price-row-actions"><span className={item.rank === 1 ? "price-status lowest" : "price-status verified"}>{item.rank === 1 ? "最低" : "已核价"}</span>{item.selectedPlan?.status === "live" && <button className="history-button compact" onClick={() => openHistory({ country: item.code, provider: activeProvider, plan: item.selectedPlan })}><History size={11} />历史</button>}</div> : <span className="monitor-loading queued"><RefreshCw className={scanning ? "spin" : ""} size={12} />{scanning ? "采集中" : "待核价"}</span>}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {!visibleCatalogRows.length && <div className="empty-state">没有找到相符的国家或地区。</div>}
+              </div>
+              <aside className="price-insight-column">
+                <div className="minimum-summary-card">
+                  <span>最低价格</span>
+                  <strong>{catalogMinimum ? usd(catalogMinimum.comparableUsd) : "暂无"}</strong>
+                  <small className="price-period-label">{selectedBilling === "annual" ? "年付折合每月" : "每月"}</small>
+                  {catalogMinimum && <div className="minimum-region"><span>{catalogMinimum.flag}</span>{catalogMinimum.name}</div>}
+                  {Number.isFinite(catalogSaving) && <small className="saving-comparison"><ArrowDownRight size={14} />比最高价省 {catalogSaving}%</small>}
+                </div>
+                <div className="distribution-card">
+                  <div className="distribution-heading"><strong>价格分布</strong><span>最低 8 个地区</span></div>
+                  <div className="distribution-list">
+                    {distributionRows.map((item, index) => <div className="distribution-row" key={item.code}>
+                      <span>{item.code}</span><i><b className={index === 0 ? "minimum" : ""} style={{ width: `${Math.max(12, item.comparableUsd / (distributionMaximum || item.comparableUsd) * 100)}%` }} /></i><em>{usd(item.comparableUsd)}</em>
+                    </div>)}
+                  </div>
+                </div>
+              </aside>
             </div>
             <footer className="catalog-footer">
-              <span><Info size={14} />当前展示 {activePlanDefinition.name}；优惠按美元折算值与美国同档价格计算，“全球最低”基于当前数据库已有价格地区。</span>
+              <span><Info size={14} />当前展示 {activePlanDefinition.name} {selectedBilling === "annual" ? "年付" : "月付"}；年付统一按折合月价排序，相对美国价格使用同档官方价。</span>
               {!catalogExpanded && !catalogQuery && catalogFilter === "ALL" ? <button onClick={() => setCatalogExpanded(true)}>显示全部 {activeRegionCodes.length} 项 <ChevronDown size={14} /></button> : <span>当前显示 {visibleCatalogRows.length} 项</span>}
             </footer>
           </section>
