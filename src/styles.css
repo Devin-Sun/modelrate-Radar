@@ -428,7 +428,7 @@ tbody tr:hover { background: rgba(44,224,176,.025); }
 .plan-tab-strip small { padding: 2px 5px; border-radius: 8px; color: #78a9d8; background: rgba(122,167,255,.08); font-size: 9px; font-weight: 600; }
 .plan-tab-strip button.active small { color: #75d9bd; background: rgba(44,224,176,.08); }
 .plan-tab-strip.anthropic button.active small { color: #f0b491; background: rgba(233,144,98,.09); }
-.catalog-comparison-layout { display: grid; grid-template-columns: minmax(0, 1fr) 276px; align-items: start; }
+.catalog-comparison-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; align-items: start; }
 .compact-catalog .catalog-scroll { border-right: 1px solid var(--line); }
 .catalog-table.simple-price-table { min-width: 790px; table-layout: fixed; }
 .catalog-table.simple-price-table th:first-child, .catalog-table.simple-price-table td:first-child { width: 58px; }
@@ -482,7 +482,7 @@ tbody tr:hover { background: rgba(44,224,176,.025); }
 .distribution-heading strong { color: #b9c9ca; font-size: 11px; }
 .distribution-heading span { color: #53676d; font-size: 8px; }
 .distribution-list { display: grid; gap: 7px; }
-.distribution-row { display: grid; grid-template-columns: 22px minmax(60px, 1fr) 58px; align-items: center; gap: 6px; }
+.distribution-row { display: grid; grid-template-columns: 22px minmax(60px, 1fr) 72px; align-items: center; gap: 6px; }
 .distribution-row > span { color: #657a80; font-size: 8px; text-align: right; }
 .distribution-row > i { height: 7px; overflow: hidden; border-radius: 4px; background: rgba(139,167,172,.12); }
 .distribution-row b { height: 100%; display: block; border-radius: inherit; background: #6c8189; }
